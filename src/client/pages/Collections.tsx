@@ -4,6 +4,9 @@ import {
   getCollections,
   deleteCollection,
   toggleCollection,
+  previewCollectionById,
+  getSyncStatus,
+  triggerSync,
   Collection,
 } from '../api'
 import Button from '../components/Button'
@@ -16,10 +19,23 @@ export default function Collections() {
   const qc = useQueryClient()
   const [editorOpen, setEditorOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Collection | null>(null)
+  const [viewTarget, setViewTarget] = useState<Collection | null>(null)
 
   const { data: collections = [], isLoading } = useQuery({
     queryKey: ['collections'],
     queryFn: getCollections,
+  })
+
+  const { data: syncStatus } = useQuery({
+    queryKey: ['sync-status'],
+    queryFn: getSyncStatus,
+    refetchInterval: 5000,
+  })
+
+  const { data: viewItems, isLoading: viewLoading } = useQuery({
+    queryKey: ['collection-view', viewTarget?.id],
+    queryFn: () => previewCollectionById(viewTarget!.id),
+    enabled: viewTarget !== null,
   })
 
   const toggleMutation = useMutation({
@@ -31,6 +47,13 @@ export default function Collections() {
   const deleteMutation = useMutation({
     mutationFn: deleteCollection,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['collections'] }),
+  })
+
+  const syncMutation = useMutation({
+    mutationFn: triggerSync,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sync-status'] })
+    },
   })
 
   function openNew() {
@@ -53,6 +76,10 @@ export default function Collections() {
     }
   }
 
+  function closeView() {
+    setViewTarget(null)
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
@@ -62,7 +89,17 @@ export default function Collections() {
             {collections.length} collection{collections.length !== 1 ? 's' : ''} configured
           </p>
         </div>
-        <Button onClick={openNew}>New Collection</Button>
+        <div className={styles.headerActions}>
+          <Button
+            variant="secondary"
+            onClick={() => syncMutation.mutate()}
+            loading={syncStatus?.running || syncMutation.isPending}
+            disabled={syncStatus?.running}
+          >
+            Sync Now
+          </Button>
+          <Button onClick={openNew}>New Collection</Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -114,6 +151,13 @@ export default function Collections() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => setViewTarget(c)}
+                      >
+                        View
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => openEdit(c)}
                       >
                         Edit
@@ -143,6 +187,36 @@ export default function Collections() {
         collection={editTarget}
         onClose={() => setEditorOpen(false)}
       />
+
+      {viewTarget && (
+        <div className={styles.viewOverlay} onClick={closeView}>
+          <div className={styles.viewPanel} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.viewHeader}>
+              <h2 className={styles.viewTitle}>{viewTarget.name}</h2>
+              <button className={styles.viewClose} onClick={closeView}>×</button>
+            </div>
+            <div className={styles.viewBody}>
+              {viewLoading ? (
+                <div className={styles.viewLoading}>Loading…</div>
+              ) : viewItems ? (
+                <>
+                  <p className={styles.viewCount}>
+                    {viewItems.count} items in this collection
+                  </p>
+                  <div className={styles.viewList}>
+                    {viewItems.items.map((item) => (
+                      <div key={item.Id} className={styles.viewItem}>
+                        <span className={styles.viewItemName}>{item.Name}</span>
+                        <span className={styles.viewItemType}>{item.Type}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

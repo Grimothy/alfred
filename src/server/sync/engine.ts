@@ -98,6 +98,37 @@ export async function runSync(): Promise<SyncSummary> {
   }
 }
 
+const STREAMING_COMPETITORS = [
+  'netflix',
+  'hulu',
+  'apple tv+',
+  'apple tv plus',
+  'amazon prime video',
+  'amazon studios',
+  'hbo',
+  'paramount+',
+  'peacock',
+  'disney+',
+  'showtime',
+  'starz',
+  'criterion channel',
+  'mubi',
+  'tubi',
+  'pluto tv',
+  'amc+',
+  'bbc iplayer',
+  'itv hub',
+  'now tv',
+  'wow',
+  'curiositystream',
+  'discovery+',
+]
+
+function isStreamingCompetitor(studioName: string): boolean {
+  const lower = studioName.toLowerCase()
+  return STREAMING_COMPETITORS.some((comp) => lower.includes(comp))
+}
+
 async function syncCollection(
   client: ReturnType<typeof getEmbyClient>,
   collection: CollectionWithRules,
@@ -119,8 +150,8 @@ async function syncCollection(
     const itemTags = (item.Tags ?? []).map((t) => t.toLowerCase())
 
     const primaryStudioRules = studioRules.filter((r) => r.match_type === 'primary')
-    const anyStudioRules = studioRules.filter((r) => r.match_type === 'any')
-    const studioRulesNoType = studioRules.filter((r) => !r.match_type || r.match_type === 'any')
+    const secondarySafeRules = studioRules.filter((r) => r.match_type === 'secondary_safe')
+    const anyStudioRules = studioRules.filter((r) => r.match_type === 'any' || !r.match_type)
 
     if (primaryStudioRules.length > 0) {
       const primaryStudio = itemStudios[0]
@@ -129,8 +160,21 @@ async function syncCollection(
       }
     }
 
-    if (studioRulesNoType.length > 0) {
-      if (!studioRulesNoType.some((r) => itemStudios.some((s) => s === r.value.toLowerCase()))) {
+    if (secondarySafeRules.length > 0) {
+      const primaryStudio = itemStudios[0]
+      const secondaryStudio = itemStudios[1]
+
+      const hasPrimaryMatch = secondarySafeRules.some((r) => r.value.toLowerCase() === primaryStudio)
+      const hasSecondaryMatch = secondaryStudio && secondarySafeRules.some((r) => r.value.toLowerCase() === secondaryStudio)
+      const primaryIsNotStreaming = primaryStudio && !isStreamingCompetitor(primaryStudio)
+
+      if (!hasPrimaryMatch && !(hasSecondaryMatch && primaryIsNotStreaming)) {
+        return false
+      }
+    }
+
+    if (anyStudioRules.length > 0) {
+      if (!anyStudioRules.some((r) => itemStudios.some((s) => s === r.value.toLowerCase()))) {
         return false
       }
     }
@@ -317,7 +361,8 @@ export async function previewCollectionWithRules(
     const itemTags = (item.Tags ?? []).map((t) => t.toLowerCase())
 
     const primaryStudioRules = studioRules.filter((r) => r.match_type === 'primary')
-    const studioRulesNoType = studioRules.filter((r) => !r.match_type || r.match_type === 'any')
+    const secondarySafeRules = studioRules.filter((r) => r.match_type === 'secondary_safe')
+    const anyStudioRules = studioRules.filter((r) => r.match_type === 'any' || !r.match_type)
 
     if (primaryStudioRules.length > 0) {
       const primaryStudio = itemStudios[0]
@@ -326,8 +371,21 @@ export async function previewCollectionWithRules(
       }
     }
 
-    if (studioRulesNoType.length > 0) {
-      if (!studioRulesNoType.some((r) => itemStudios.some((s) => s === r.value.toLowerCase()))) {
+    if (secondarySafeRules.length > 0) {
+      const primaryStudio = itemStudios[0]
+      const secondaryStudio = itemStudios[1]
+
+      const hasPrimaryMatch = secondarySafeRules.some((r) => r.value.toLowerCase() === primaryStudio)
+      const hasSecondaryMatch = secondaryStudio && secondarySafeRules.some((r) => r.value.toLowerCase() === secondaryStudio)
+      const primaryIsNotStreaming = primaryStudio && !isStreamingCompetitor(primaryStudio)
+
+      if (!hasPrimaryMatch && !(hasSecondaryMatch && primaryIsNotStreaming)) {
+        return false
+      }
+    }
+
+    if (anyStudioRules.length > 0) {
+      if (!anyStudioRules.some((r) => itemStudios.some((s) => s === r.value.toLowerCase()))) {
         return false
       }
     }

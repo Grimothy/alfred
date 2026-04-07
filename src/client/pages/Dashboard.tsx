@@ -167,11 +167,11 @@ export default function Dashboard() {
                   />
                 </div>
                 <div className={styles.collStudios}>
-                  {c.rules.slice(0, 4).map((r) => (
+                  {c.rules.slice(0, 3).map((r) => (
                     <Badge key={r.id} label={r.value} variant="gold" />
                   ))}
-                  {c.rules.length > 4 && (
-                    <Badge label={`+${c.rules.length - 4}`} />
+                  {c.rules.length > 3 && (
+                    <Badge label={`+${c.rules.length - 3}`} />
                   )}
                 </div>
                 {syncResult && (

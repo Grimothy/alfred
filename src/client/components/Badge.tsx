@@ -9,7 +9,7 @@ interface BadgeProps {
 export default function Badge({ label, onRemove, variant = 'default' }: BadgeProps) {
   return (
     <span className={[styles.badge, styles[variant]].join(' ')}>
-      {label}
+      <span className={styles.label}>{label}</span>
       {onRemove && (
         <button className={styles.remove} onClick={onRemove} title="Remove">
           ×

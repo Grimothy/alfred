@@ -44,7 +44,7 @@ export default function CollectionEditor({
   const [genreSearch, setGenreSearch] = useState('')
   const [tagInput, setTagInput] = useState('')
   const [contentType, setContentType] = useState<'all' | 'movie' | 'series'>('all')
-  const [studioMatchType, setStudioMatchType] = useState<'any' | 'primary'>('any')
+  const [studioMatchType, setStudioMatchType] = useState<'any' | 'primary' | 'secondary_safe'>('any')
   const [poster, setPoster] = useState<ImageSlot>(emptySlot())
   const [backdrop, setBackdrop] = useState<ImageSlot>(emptySlot())
   const [previewResult, setPreviewResult] = useState<{
@@ -84,7 +84,7 @@ export default function CollectionEditor({
         (firstStudioRule?.content_type as 'all' | 'movie' | 'series') || 'all'
       )
       setStudioMatchType(
-        (firstStudioRule?.match_type as 'any' | 'primary') || 'any'
+        (firstStudioRule?.match_type as 'any' | 'primary' | 'secondary_safe') || 'any'
       )
       const tagRule = collection.rules.find((r) => r.field === 'tag')
       setTagInput(tagRule?.tags || '')
@@ -353,6 +353,16 @@ export default function CollectionEditor({
                   onChange={() => setStudioMatchType('primary')}
                 />
                 Primary Only
+              </label>
+              <label className={styles.radioLabel}>
+                <input
+                  type="radio"
+                  name="studioMatchType"
+                  value="secondary_safe"
+                  checked={studioMatchType === 'secondary_safe'}
+                  onChange={() => setStudioMatchType('secondary_safe')}
+                />
+                Primary or Secondary (no streaming)
               </label>
             </div>
             <input

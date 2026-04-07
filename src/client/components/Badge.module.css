@@ -9,6 +9,15 @@
   font-family: var(--font-mono);
   white-space: nowrap;
   border: 1px solid;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .default {

@@ -5,6 +5,23 @@ import Button from '../components/Button'
 import Card from '../components/Card'
 import styles from './Settings.module.css'
 
+const SCHEDULE_PRESETS = [
+  { label: 'Every 5 min', value: '*/5 * * * *', description: 'Every 5 minutes' },
+  { label: 'Every 15 min', value: '*/15 * * * *', description: 'Every 15 minutes' },
+  { label: 'Every 30 min', value: '*/30 * * * *', description: 'Every 30 minutes' },
+  { label: 'Hourly', value: '0 * * * *', description: 'Every hour at :00' },
+  { label: 'Every 2 hours', value: '0 */2 * * *', description: 'Every 2 hours' },
+  { label: 'Every 4 hours', value: '0 */4 * * *', description: 'Every 4 hours (midnight, 4, 8, noon, 4, 8 PM)' },
+  { label: 'Every 6 hours', value: '0 */6 * * *', description: 'Every 6 hours' },
+  { label: 'Every 12 hours', value: '0 0,12 * * *', description: 'Twice daily at midnight and noon' },
+  { label: 'Daily at 3 AM', value: '0 3 * * *', description: 'Once daily at 3:00 AM' },
+  { label: 'Daily at 6 AM', value: '0 6 * * *', description: 'Once daily at 6:00 AM' },
+  { label: '2x daily (3 AM, 3 PM)', value: '0 3,15 * * *', description: 'Twice daily at 3 AM and 3 PM' },
+  { label: 'Weekly', value: '0 3 * * 0', description: 'Every Sunday at 3:00 AM' },
+]
+
+const CUSTOM_INDEX = SCHEDULE_PRESETS.length
+
 export default function Settings() {
   const qc = useQueryClient()
   const { data: settings, isLoading } = useQuery({
@@ -15,6 +32,7 @@ export default function Settings() {
   const [host, setHost] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [schedule, setSchedule] = useState('0 3 * * *')
+  const [schedulePreset, setSchedulePreset] = useState(0)
   const [syncEnabled, setSyncEnabled] = useState(false)
   const [showKey, setShowKey] = useState(false)
   const [testResult, setTestResult] = useState<{
@@ -30,6 +48,9 @@ export default function Settings() {
       setApiKey(settings.emby_api_key ?? '')
       setSchedule(settings.sync_schedule ?? '0 3 * * *')
       setSyncEnabled(settings.sync_enabled === 'true')
+
+      const presetIndex = SCHEDULE_PRESETS.findIndex((p) => p.value === settings.sync_schedule)
+      setSchedulePreset(presetIndex >= 0 ? presetIndex : CUSTOM_INDEX)
     }
   }, [settings])
 
@@ -58,6 +79,13 @@ export default function Settings() {
       setTestResult({ ok: false, message: msg })
     } finally {
       setTestLoading(false)
+    }
+  }
+
+  function handleSchedulePresetChange(index: number) {
+    setSchedulePreset(index)
+    if (index < CUSTOM_INDEX) {
+      setSchedule(SCHEDULE_PRESETS[index].value)
     }
   }
 
@@ -164,17 +192,47 @@ export default function Settings() {
           </div>
 
           <div className={styles.field}>
-            <label className={styles.label}>Cron Schedule</label>
-            <input
-              className={styles.input}
-              value={schedule}
-              onChange={(e) => setSchedule(e.target.value)}
-              disabled={!syncEnabled}
-              placeholder="0 3 * * *"
-            />
-            <p className={styles.hint}>
-              Default: <code>0 3 * * *</code> (3:00 AM daily). Uses standard 5-field cron syntax.
-            </p>
+            <label className={styles.label}>Schedule</label>
+            <div className={styles.scheduleGrid}>
+              {SCHEDULE_PRESETS.map((preset, index) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  className={[
+                    styles.scheduleOption,
+                    schedulePreset === index ? styles.scheduleOptionSelected : '',
+                  ].filter(Boolean).join(' ')}
+                  onClick={() => handleSchedulePresetChange(index)}
+                  disabled={!syncEnabled}
+                >
+                  <span className={styles.scheduleLabel}>{preset.label}</span>
+                  <span className={styles.scheduleDesc}>{preset.description}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                className={[
+                  styles.scheduleOption,
+                  styles.scheduleCustom,
+                  schedulePreset === CUSTOM_INDEX ? styles.scheduleOptionSelected : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => handleSchedulePresetChange(CUSTOM_INDEX)}
+                disabled={!syncEnabled}
+              >
+                <span className={styles.scheduleLabel}>Custom</span>
+                <input
+                  className={styles.customCronInput}
+                  value={schedule}
+                  onChange={(e) => {
+                    setSchedule(e.target.value)
+                    setSchedulePreset(CUSTOM_INDEX)
+                  }}
+                  placeholder="0 3 * * *"
+                  disabled={!syncEnabled}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </button>
+            </div>
           </div>
         </Card>
       </div>

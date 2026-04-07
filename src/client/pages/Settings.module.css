@@ -160,3 +160,71 @@
   color: var(--success);
   letter-spacing: 0.04em;
 }
+
+.scheduleGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.scheduleOption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
+}
+
+.scheduleOption:hover:not(:disabled) {
+  border-color: var(--accent-gold);
+  background: var(--accent-gold-glow);
+}
+
+.scheduleOption:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.scheduleOptionSelected {
+  border-color: var(--accent-gold);
+  background: var(--accent-gold-glow);
+}
+
+.scheduleLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.scheduleDesc {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.scheduleCustom {
+  grid-column: span 2;
+}
+
+.customCronInput {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 4px 8px;
+  outline: none;
+  width: 120px;
+  margin-top: 4px;
+}
+
+.customCronInput:focus {
+  border-color: var(--accent-gold);
+}

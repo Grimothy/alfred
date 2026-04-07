@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "ci-workflows": {
+      "source": "laurigates/claude-plugins",
+      "sourceType": "github",
+      "computedHash": "1a68cac1f7487e3d4cfbf62e4766ab3368d230b95e46e96086995c724b6bd2b2"
+    }
+  }
+}
