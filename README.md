@@ -13,7 +13,11 @@ A self-hosted collection manager for [Emby](https://emby.media). Alfred automati
 
 ## Screenshots
 
-> _Add screenshots here_
+![Dashboard](docs/dashboard.png)
+![Collections](docs/collections.png)
+![Library](docs/library.png)
+![Sync History](docs/history.png)
+![Settings](docs/settings.png)
 
 ## Requirements
 
