@@ -41,7 +41,7 @@ COPY --from=server-builder /build/dist/server ./dist/server
 COPY --from=server-builder /build/dist/shared ./dist/shared
 
 # Create data directory
-RUN mkdir -p /app/data /app/config
+RUN mkdir -p /app/data
 
 ENV NODE_ENV=production
 ENV PORT=8099

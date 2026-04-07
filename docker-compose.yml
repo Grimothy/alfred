@@ -9,7 +9,6 @@ services:
       - "8099:8099"
     volumes:
       - /mnt/Pool1/containers/alfred/data:/app/data
-      - /mnt/Pool1/containers/alfred/config:/app/config
     environment:
       - NODE_ENV=production
       - PORT=8099

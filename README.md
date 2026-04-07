@@ -37,7 +37,6 @@ services:
       - "8099:8099"
     volumes:
       - /your/data/path:/app/data
-      - /your/config/path:/app/config
     environment:
       - NODE_ENV=production
       - PORT=8099
@@ -58,7 +57,6 @@ docker run -d \
   --name alfred \
   -p 8099:8099 \
   -v /your/data/path:/app/data \
-  -v /your/config/path:/app/config \
   -e NODE_ENV=production \
   ghcr.io/grimothy/alfred:latest
 ```
