@@ -84,9 +84,51 @@ These are set at container level and are not configurable at runtime:
 | `DB_PATH` | `/app/data/alfred.db` | Path to the SQLite database file |
 | `NODE_ENV` | `production` | Set to `development` to disable static file serving |
 
-## Development
+## Collections
 
-```bash
+Collections are built from rules. Each collection can combine studios, genres, and tags to precisely target the content you want.
+
+### Content Type
+
+Filters items before any other rule is evaluated.
+
+| Option | Description |
+|---|---|
+| All | Movies and TV series |
+| Movies Only | Movies only |
+| TV Only | TV series only |
+
+### Studios / Networks
+
+Select one or more studios or networks from your Emby library. All selected studios are treated as OR — an item matches if it belongs to any of them.
+
+**Studio matching modes** control which studio credit on an item is checked:
+
+| Mode | Description |
+|---|---|
+| Any Studio | Item matches if the selected studio appears anywhere in its studio list |
+| Primary Only | Item matches only if the selected studio is the **first** (primary) studio listed |
+| Primary or Secondary (no streaming) | Item matches if the selected studio is the primary studio, or is the secondary studio and the primary studio is **not** a streaming service (e.g. Netflix, Hulu, Disney+). Useful for co-productions where the physical studio should take precedence |
+
+### Genres
+
+Optional. Select one or more genres — items must match at least one.
+
+Available genres: Action, Adventure, Animation, Comedy, Crime, Documentary, Drama, Family, Fantasy, History, Horror, Music, Mystery, Romance, Science Fiction, Thriller, War, Western.
+
+### Tags
+
+Optional. Enter one or more comma-separated tags. Items must have **all** listed tags to match. Useful for targeting originals (e.g. `Netflix Original`).
+
+### Images
+
+Optional custom poster and backdrop images can be uploaded per collection (JPG/PNG). If not set, Emby will use its default artwork.
+
+### Preview
+
+Before saving, use the **Preview** button to see exactly which items the current rules would match — without making any changes to your Emby library.
+
+## Development```bash
 # Install dependencies
 npm install
 
