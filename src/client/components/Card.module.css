@@ -1,0 +1,12 @@
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+}
+
+.accent {
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-warm);
+}

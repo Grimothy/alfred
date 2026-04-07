@@ -1,0 +1,114 @@
+.layout {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 200px;
+  min-width: 200px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.brand {
+  padding: 28px 20px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.brandName {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--accent-gold);
+  letter-spacing: 0.04em;
+}
+
+.brandTag {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+  font-style: italic;
+}
+
+.navList {
+  list-style: none;
+  padding: 12px 0;
+  flex: 1;
+}
+
+.navList li {
+  padding: 0 8px;
+}
+
+.navLink {
+  display: block;
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, background 0.15s;
+}
+
+.navLink:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
+.navLinkActive {
+  color: var(--accent-gold) !important;
+  background: var(--accent-gold-glow) !important;
+}
+
+.syncIndicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-size: 11px;
+  color: var(--accent-gold);
+  background: var(--accent-gold-glow);
+  border-top: 1px solid var(--border-accent);
+  border-bottom: 1px solid var(--border-accent);
+  letter-spacing: 0.04em;
+}
+
+.syncDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.sidebarFooter {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.version {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.main {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg-primary);
+}

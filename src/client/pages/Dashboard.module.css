@@ -1,0 +1,169 @@
+.page {
+  padding: 32px 36px;
+  max-width: 1100px;
+}
+
+.pageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 28px;
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+.tagline {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 2px;
+  letter-spacing: 0.06em;
+}
+
+.syncBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--accent-gold-glow);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  color: var(--accent-gold);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  margin-bottom: 20px;
+}
+
+.syncDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  animation: pulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.statsRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.statCard {
+  text-align: center;
+}
+
+.statValue {
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: var(--accent-gold);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.statLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.collectionsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.collCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.collHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.collName {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--text-primary);
+  font-weight: 600;
+  flex: 1;
+}
+
+.collStudios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.collStats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+}
+
+.collTotal {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.setupCard,
+.emptyCard {
+  margin-top: 40px;
+}
+
+.setupContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.setupIcon {
+  font-size: 32px;
+  opacity: 0.4;
+}
+
+.setupTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+
+.setupDesc {
+  color: var(--text-secondary);
+  font-size: 13px;
+  max-width: 320px;
+}
+
+.emptyCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+}
+
+.emptyText {
+  color: var(--text-secondary);
+  font-size: 13px;
+}

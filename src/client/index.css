@@ -1,0 +1,86 @@
+:root {
+  --bg-primary: #1a1a1f;
+  --bg-secondary: #22222a;
+  --bg-card: #2a2a34;
+  --bg-elevated: #32323e;
+  --accent-gold: #c9a84c;
+  --accent-gold-dim: #a8893d;
+  --accent-gold-glow: rgba(201, 168, 76, 0.15);
+  --text-primary: #f0eee8;
+  --text-secondary: #9e9b92;
+  --text-muted: #5c5a54;
+  --border-subtle: #2e2e3a;
+  --border-accent: rgba(201, 168, 76, 0.3);
+  --success: #5c9e6e;
+  --error: #9e4c4c;
+  --warning: #9e7a4c;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-mono: 'DM Mono', 'Fira Code', monospace;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-warm: 0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(201, 168, 76, 0.05);
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Film grain overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-size: 128px 128px;
+}
+
+#root {
+  height: 100%;
+  display: flex;
+}
+
+a {
+  color: var(--accent-gold);
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: var(--font-mono);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-elevated);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-gold-dim);
+}

@@ -1,0 +1,194 @@
+import { Router } from 'express'
+import path from 'path'
+import fs from 'fs'
+import multer from 'multer'
+import {
+  getCollections,
+  getCollectionById,
+  createCollection,
+  updateCollection,
+  deleteCollection,
+  toggleCollection,
+  setCollectionImagePath,
+} from '../db/queries'
+import { previewCollectionWithRules, IMAGES_DIR } from '../sync/engine'
+
+// Ensure images directory exists
+if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true })
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, IMAGES_DIR),
+  filename: (req, file, cb) => {
+    const id = req.params.id
+    const type = req.params.type // 'poster' or 'backdrop'
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg'
+    cb(null, `collection-${id}-${type}${ext}`)
+  },
+})
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true)
+    } else {
+      cb(new Error('Only image files are accepted'))
+    }
+  },
+})
+
+const router = Router()
+
+// GET /api/collections
+router.get('/', (_req, res) => {
+  const collections = getCollections()
+  res.json(collections)
+})
+
+// POST /api/collections
+router.post('/', (req, res) => {
+  const { name, rules } = req.body as {
+    name: string
+    rules: { field: string; value: string }[]
+  }
+
+  if (!name?.trim()) {
+    return res.status(400).json({ error: 'Collection name is required' })
+  }
+  if (!Array.isArray(rules) || rules.length === 0) {
+    return res.status(400).json({ error: 'At least one rule is required' })
+  }
+
+  try {
+    const collection = createCollection(name.trim(), rules)
+    return res.status(201).json(collection)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes('UNIQUE')) {
+      return res.status(409).json({ error: 'A collection with that name already exists' })
+    }
+    return res.status(500).json({ error: msg })
+  }
+})
+
+// PUT /api/collections/:id
+router.put('/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const { name, rules, enabled } = req.body as {
+    name: string
+    rules: { field: string; value: string }[]
+    enabled?: boolean
+  }
+
+  if (!name?.trim()) {
+    return res.status(400).json({ error: 'Collection name is required' })
+  }
+
+  const enabledNum = enabled !== undefined ? (enabled ? 1 : 0) : undefined
+  const updated = updateCollection(id, name.trim(), rules ?? [], enabledNum)
+  if (!updated) return res.status(404).json({ error: 'Collection not found' })
+
+  return res.json(updated)
+})
+
+// PATCH /api/collections/:id/toggle
+router.patch('/:id/toggle', (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const { enabled } = req.body as { enabled: boolean }
+  const col = getCollectionById(id)
+  if (!col) return res.status(404).json({ error: 'Collection not found' })
+  toggleCollection(id, enabled)
+  return res.json({ ok: true })
+})
+
+// DELETE /api/collections/:id
+router.delete('/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const col = getCollectionById(id)
+  if (!col) return res.status(404).json({ error: 'Collection not found' })
+  deleteCollection(id)
+  return res.json({ ok: true })
+})
+
+// GET /api/collections/:id/preview
+router.get('/:id/preview', async (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const col = getCollectionById(id)
+  if (!col) return res.status(404).json({ error: 'Collection not found' })
+
+  try {
+    const items = await previewCollectionWithRules(col.rules)
+    return res.json({ count: items.length, items })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: msg })
+  }
+})
+
+// POST /api/collections/preview (for unsaved rules)
+router.post('/preview', async (req, res) => {
+  const { rules = [] } = req.body as {
+    rules?: Array<{
+      field: string
+      value: string
+      content_type?: string
+      match_type?: string
+      tags?: string
+    }>
+  }
+  try {
+    const items = await previewCollectionWithRules(rules)
+    return res.json({ count: items.length, items })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: msg })
+  }
+})
+
+// POST /api/collections/:id/images/:type  (type = poster | backdrop)
+router.post(
+  '/:id/images/:type',
+  (req, res, next) => {
+    // Validate :type before multer writes anything
+    if (!['poster', 'backdrop'].includes(req.params.type)) {
+      return res.status(400).json({ error: 'type must be poster or backdrop' })
+    }
+    next()
+  },
+  upload.single('image'),
+  (req, res) => {
+    const id = parseInt(req.params.id, 10)
+    const type = req.params.type as 'poster' | 'backdrop'
+    const col = getCollectionById(id)
+    if (!col) return res.status(404).json({ error: 'Collection not found' })
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+
+    // Delete old file if a different path was stored
+    const oldPath = type === 'poster' ? col.poster_path : col.backdrop_path
+    if (oldPath && oldPath !== req.file.path && fs.existsSync(oldPath)) {
+      fs.unlinkSync(oldPath)
+    }
+
+    setCollectionImagePath(id, type, req.file.path)
+    return res.json({ ok: true, path: req.file.path })
+  }
+)
+
+// DELETE /api/collections/:id/images/:type
+router.delete('/:id/images/:type', (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const type = req.params.type as 'poster' | 'backdrop'
+  if (!['poster', 'backdrop'].includes(type)) {
+    return res.status(400).json({ error: 'type must be poster or backdrop' })
+  }
+  const col = getCollectionById(id)
+  if (!col) return res.status(404).json({ error: 'Collection not found' })
+
+  const filePath = type === 'poster' ? col.poster_path : col.backdrop_path
+  if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath)
+  setCollectionImagePath(id, type, null)
+  return res.json({ ok: true })
+})
+
+export default router
