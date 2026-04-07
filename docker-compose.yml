@@ -1,10 +1,7 @@
 services:
   alfred:
-    image: alfred:latest
+    image: ghcr.io/grimothy/alfred:master
     container_name: alfred
-    build:
-      context: .
-      dockerfile: Dockerfile
     ports:
       - "8099:8099"
     volumes:
