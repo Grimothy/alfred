@@ -128,7 +128,9 @@ Optional custom poster and backdrop images can be uploaded per collection (JPG/P
 
 Before saving, use the **Preview** button to see exactly which items the current rules would match — without making any changes to your Emby library.
 
-## Development```bash
+## Development
+
+```bash
 # Install dependencies
 npm install
 
