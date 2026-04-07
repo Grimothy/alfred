@@ -11,14 +11,6 @@ A self-hosted collection manager for [Emby](https://emby.media). Alfred automati
 - **Sync history** — per-collection results with item counts and error reporting
 - **Single container** — React frontend + Express API + SQLite, all in one image
 
-## Screenshots
-
-![Dashboard](docs/dashboard.png)
-![Collections](docs/collections.png)
-![Library](docs/library.png)
-![Sync History](docs/history.png)
-![Settings](docs/settings.png)
-
 ## Requirements
 
 - Docker (and optionally Docker Compose)
@@ -118,3 +110,11 @@ The Vite dev server proxies `/api` requests to the Express server on port `8099`
 ## License
 
 MIT
+
+## Screenshots
+
+![Dashboard](docs/dashboard.png)
+![Collections](docs/collections.png)
+![Library](docs/library.png)
+![Sync History](docs/history.png)
+![Settings](docs/settings.png)
