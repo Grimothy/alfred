@@ -311,15 +311,25 @@ async function syncTmdbCollection(
   try {
     const tmdb = getTmdbClient(tmdbApiKey)
 
-    const moviePromise = collection.tmdb_company_id != null
-      ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
-      : Promise.resolve([])
+  const moviePromise = collection.tmdb_company_id != null
+    ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
+    : Promise.resolve([])
 
-    const tvPromise = collection.tmdb_network_id != null
-      ? tmdb.discoverTvByNetwork(collection.tmdb_network_id)
-      : Promise.resolve([])
+  const tvNetworkPromise = collection.tmdb_network_id != null
+    ? tmdb.discoverTvByNetwork(collection.tmdb_network_id)
+    : Promise.resolve([])
 
-    const [movies, shows] = await Promise.all([moviePromise, tvPromise])
+  const tvCompanyPromise = collection.tmdb_company_id != null
+    ? tmdb.discoverTvByCompany(collection.tmdb_company_id)
+    : Promise.resolve([])
+
+  const [movies, networkShows, companyShows] = await Promise.all([
+    moviePromise,
+    tvNetworkPromise,
+    tvCompanyPromise,
+  ])
+
+  const shows = [...networkShows, ...companyShows]
 
     tmdbImdbIds = new Set<string>()
     tmdbTvdbIds = new Set<string>()
@@ -498,14 +508,20 @@ export async function previewTmdbCollection(
     ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
     : Promise.resolve([])
 
-  const tvPromise = collection.tmdb_network_id != null
+  const tvNetworkPromise = collection.tmdb_network_id != null
     ? tmdb.discoverTvByNetwork(collection.tmdb_network_id)
     : Promise.resolve([])
 
-  const [allItems, [movies, shows]] = await Promise.all([
+  const tvCompanyPromise = collection.tmdb_company_id != null
+    ? tmdb.discoverTvByCompany(collection.tmdb_company_id)
+    : Promise.resolve([])
+
+  const [allItems, [movies, networkShows, companyShows]] = await Promise.all([
     client.getItems(['Movie', 'Series']),
-    Promise.all([moviePromise, tvPromise]),
+    Promise.all([moviePromise, tvNetworkPromise, tvCompanyPromise]),
   ])
+
+  const shows = [...networkShows, ...companyShows]
 
   const tmdbImdbIds = new Set<string>()
   const tmdbTvdbIds = new Set<string>()
