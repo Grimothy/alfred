@@ -311,26 +311,15 @@ async function syncTmdbCollection(
   try {
     const tmdb = getTmdbClient(tmdbApiKey)
 
-  const moviePromise =
-    collection.tmdb_company_id != null && collection.tmdb_network_id == null
-      ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
-      : Promise.resolve([])
+  const moviePromise = collection.tmdb_company_id != null
+    ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
+    : Promise.resolve([])
 
-  const tvNetworkPromise = collection.tmdb_network_id != null
+  const tvPromise = collection.tmdb_network_id != null
     ? tmdb.discoverTvByNetwork(collection.tmdb_network_id)
     : Promise.resolve([])
 
-  const tvCompanyPromise = collection.tmdb_company_id != null
-    ? tmdb.discoverTvByCompany(collection.tmdb_company_id)
-    : Promise.resolve([])
-
-  const [movies, networkShows, companyShows] = await Promise.all([
-    moviePromise,
-    tvNetworkPromise,
-    tvCompanyPromise,
-  ])
-
-  const shows = [...networkShows, ...companyShows]
+  const [movies, shows] = await Promise.all([moviePromise, tvPromise])
 
     tmdbImdbIds = new Set<string>()
     tmdbTvdbIds = new Set<string>()
@@ -505,25 +494,18 @@ export async function previewTmdbCollection(
   const client = getEmbyClient(host, apiKey)
   const tmdb = getTmdbClient(tmdbApiKey)
 
-  const moviePromise =
-    collection.tmdb_company_id != null && collection.tmdb_network_id == null
-      ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
-      : Promise.resolve([])
+  const moviePromise = collection.tmdb_company_id != null
+    ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
+    : Promise.resolve([])
 
-  const tvNetworkPromise = collection.tmdb_network_id != null
+  const tvPromise = collection.tmdb_network_id != null
     ? tmdb.discoverTvByNetwork(collection.tmdb_network_id)
     : Promise.resolve([])
 
-  const tvCompanyPromise = collection.tmdb_company_id != null
-    ? tmdb.discoverTvByCompany(collection.tmdb_company_id)
-    : Promise.resolve([])
-
-  const [allItems, [movies, networkShows, companyShows]] = await Promise.all([
+  const [allItems, [movies, shows]] = await Promise.all([
     client.getItems(['Movie', 'Series']),
-    Promise.all([moviePromise, tvNetworkPromise, tvCompanyPromise]),
+    Promise.all([moviePromise, tvPromise]),
   ])
-
-  const shows = [...networkShows, ...companyShows]
 
   const tmdbImdbIds = new Set<string>()
   const tmdbTvdbIds = new Set<string>()
