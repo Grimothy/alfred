@@ -306,8 +306,10 @@ async function syncTmdbCollection(
   embyCollectionMap: Map<string, string>,
   tmdbApiKey: string
 ): Promise<CollectionSyncResult> {
-  let tmdbImdbIds: Set<string>
-  let tmdbTvdbIds: Set<string>
+  let movie_imdbIds: Set<string>
+  let movie_tvdbIds: Set<string>
+  let tv_imdbIds: Set<string>
+  let tv_tvdbIds: Set<string>
   try {
     const tmdb = getTmdbClient(tmdbApiKey)
 
@@ -321,17 +323,19 @@ async function syncTmdbCollection(
 
   const [movies, shows] = await Promise.all([moviePromise, tvPromise])
 
-    tmdbImdbIds = new Set<string>()
-    tmdbTvdbIds = new Set<string>()
+    movie_imdbIds = new Set<string>()
+    movie_tvdbIds = new Set<string>()
+    tv_imdbIds = new Set<string>()
+    tv_tvdbIds = new Set<string>()
 
     for (const m of movies) {
-      if (m.imdb_id) tmdbImdbIds.add(m.imdb_id)
+      if (m.imdb_id) movie_imdbIds.add(m.imdb_id)
     }
     for (const s of shows) {
       const imdbId = s.external_ids?.imdb_id
-      if (imdbId) tmdbImdbIds.add(imdbId)
+      if (imdbId) tv_imdbIds.add(imdbId)
       const tvdbId = s.external_ids?.tvdb_id
-      if (tvdbId != null) tmdbTvdbIds.add(String(tvdbId))
+      if (tvdbId != null) tv_tvdbIds.add(String(tvdbId))
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -347,11 +351,21 @@ async function syncTmdbCollection(
 
   // Match Emby items using IMDb ID first, falling back to TVDB ID.
   // Emby is inconsistent with casing: Imdb/IMDB, Tvdb/TVDB.
+  // Only match if the Emby item type (Movie/Series) matches what we discovered.
   const matchedItems = allItems.filter((item) => {
-    const imdb = item.ProviderIds?.Imdb ?? item.ProviderIds?.IMDB
-    if (imdb && tmdbImdbIds.has(imdb)) return true
+    const isMovie = item.Type === 'Movie'
+    const isSeries = item.Type === 'Series'
+    const imdb = item.ProviderIds?.IMDB
     const tvdb = item.ProviderIds?.Tvdb ?? item.ProviderIds?.TVDB
-    if (tvdb && tmdbTvdbIds.has(tvdb)) return true
+
+    if (isMovie) {
+      if (imdb && movie_imdbIds.has(imdb)) return true
+      if (tvdb && movie_tvdbIds.has(tvdb)) return true
+    }
+    if (isSeries) {
+      if (imdb && tv_imdbIds.has(imdb)) return true
+      if (tvdb && tv_tvdbIds.has(tvdb)) return true
+    }
     return false
   })
   const matchedIds = matchedItems.map((i) => i.Id)
@@ -508,7 +522,10 @@ export async function previewTmdbCollection(
   ])
 
   const tmdbImdbIds = new Set<string>()
-  const tmdbTvdbIds = new Set<string>()
+  const movie_imdbIds = new Set<string>()
+  const movie_tvdbIds = new Set<string>()
+  const tv_imdbIds = new Set<string>()
+  const tv_tvdbIds = new Set<string>()
 
   for (const m of movies) {
     if (m.imdb_id) tmdbImdbIds.add(m.imdb_id)
@@ -517,14 +534,14 @@ export async function previewTmdbCollection(
     const imdbId = s.external_ids?.imdb_id
     if (imdbId) tmdbImdbIds.add(imdbId)
     const tvdbId = s.external_ids?.tvdb_id
-    if (tvdbId != null) tmdbTvdbIds.add(String(tvdbId))
+    if (tvdbId != null) tv_tvdbIds.add(String(tvdbId))
   }
 
   return allItems.filter((item) => {
     const imdb = item.ProviderIds?.Imdb ?? item.ProviderIds?.IMDB
     if (imdb && tmdbImdbIds.has(imdb)) return true
     const tvdb = item.ProviderIds?.Tvdb ?? item.ProviderIds?.TVDB
-    if (tvdb && tmdbTvdbIds.has(tvdb)) return true
+    if (tvdb && tv_tvdbIds.has(tvdb)) return true
     return false
   })
 }
