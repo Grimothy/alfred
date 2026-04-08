@@ -28,14 +28,15 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Emby connection test
-app.get('/api/emby/test', async (_req, res) => {
+// Emby connection test — accepts ?host= and ?apiKey= query params so the user
+// can test unsaved credentials directly from the Settings form.
+app.get('/api/emby/test', async (req, res) => {
   const settings = getAllSettings()
-  const host = settings['emby_host']
-  const apiKey = settings['emby_api_key']
+  const host = (req.query.host as string | undefined) || settings['emby_host']
+  const apiKey = (req.query.apiKey as string | undefined) || settings['emby_api_key']
 
   if (!host || !apiKey) {
-    return res.status(400).json({ error: 'Emby not configured' })
+    return res.status(400).json({ error: 'Emby host and API key are required' })
   }
 
   try {
@@ -48,7 +49,30 @@ app.get('/api/emby/test', async (_req, res) => {
   }
 })
 
-// ── Serve React App (production) ──────────────────────────────────────────────
+// Debug: sample first 10 Series + Movie items with raw ProviderIds
+// GET /api/debug/emby-sample
+app.get('/api/debug/emby-sample', async (_req, res) => {
+  const settings = getAllSettings()
+  const host = settings['emby_host']
+  const apiKey = settings['emby_api_key']
+  if (!host || !apiKey) return res.status(400).json({ error: 'Emby not configured' })
+  try {
+    const client = getEmbyClient(host, apiKey)
+    const items = await client.getItems(['Movie', 'Series'])
+    const sample = items.slice(0, 20).map((i) => ({
+      Id: i.Id,
+      Name: i.Name,
+      Type: i.Type,
+      ProviderIds: i.ProviderIds,
+    }))
+    return res.json({ total: items.length, sample })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: msg })
+  }
+})
+
+
 if (process.env.NODE_ENV === 'production') {
   const clientDist = path.join(__dirname, '../client')
   app.use(express.static(clientDist))

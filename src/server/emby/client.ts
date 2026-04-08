@@ -10,6 +10,7 @@ export interface EmbyItem {
   Tags?: string[]
   ProductionYear?: number
   PremiereDate?: string
+  ProviderIds?: { Imdb?: string; IMDB?: string; Tvdb?: string; TVDB?: string }
 }
 
 export interface EmbyCollection {
@@ -47,7 +48,7 @@ export class EmbyClient {
       const res = await this.http.get('/emby/Items', {
         params: {
           IncludeItemTypes: types.join(','),
-          Fields: 'Studios,Genres,Tags,ProductionYear',
+          Fields: 'Studios,Genres,Tags,ProductionYear,ProviderIds',
           Recursive: true,
           StartIndex: startIndex,
           Limit: limit,
@@ -119,8 +120,8 @@ export class EmbyClient {
     }
   }
 
-  async clearCollection(collectionId: string): Promise<void> {
-    // Get current members then remove them all
+  async clearCollection(collectionId: string): Promise<number> {
+    // Get current members then remove them all; returns the number of items removed
     const res = await this.http.get('/emby/Items', {
       params: {
         ParentId: collectionId,
@@ -133,6 +134,7 @@ export class EmbyClient {
     if (currentIds.length > 0) {
       await this.removeFromCollection(collectionId, currentIds)
     }
+    return currentIds.length
   }
 
   // ── Images ───────────────────────────────────────────────────────────────────

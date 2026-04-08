@@ -52,6 +52,7 @@ export default function Dashboard() {
     mutationFn: triggerSync,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sync-status'] })
+      qc.invalidateQueries({ queryKey: ['sync-history'] })
     },
   })
 
@@ -180,7 +181,7 @@ export default function Dashboard() {
                       {syncResult.total} items
                     </span>
                     {syncResult.error && (
-                      <Badge label="Error" variant="error" />
+                      <Badge label="Sync Error" variant="error" />
                     )}
                   </div>
                 )}

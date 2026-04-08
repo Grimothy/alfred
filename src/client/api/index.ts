@@ -23,6 +23,9 @@ export interface Collection {
   enabled: number
   poster_path: string | null
   backdrop_path: string | null
+  use_tmdb: number
+  tmdb_company_id: number | null
+  tmdb_network_id: number | null
   created_at: string
   rules: Rule[]
 }
@@ -78,6 +81,7 @@ export interface Settings {
   emby_api_key: string
   sync_schedule: string
   sync_enabled: string
+  tmdb_api_key: string
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -88,8 +92,47 @@ export const getSettings = () =>
 export const updateSettings = (data: Partial<Settings>) =>
   api.put('/settings', data).then((r) => r.data)
 
-export const testConnection = () =>
-  api.get('/emby/test').then((r) => r.data)
+export const testConnection = (host?: string, apiKey?: string) => {
+  const params: Record<string, string> = {}
+  if (host) params.host = host
+  if (apiKey && apiKey !== '••••••••') params.apiKey = apiKey
+  return api.get('/emby/test', { params }).then((r) => r.data)
+}
+
+export const testTmdbConnection = (apiKey: string) =>
+  api.post<{ ok: boolean; name: string; version: string }>(
+    '/settings/tmdb/test',
+    { apiKey }
+  ).then((r) => r.data)
+
+export const refreshTmdbCache = () =>
+  api.post<{ refreshed: number; failed: number }>(
+    '/settings/tmdb/cache/refresh'
+  ).then((r) => r.data)
+
+export interface TmdbCompanyResult {
+  id: number
+  name: string
+  logo_path: string | null
+  origin_country: string
+}
+
+export const searchTmdbCompanies = (q: string) =>
+  api
+    .get<TmdbCompanyResult[]>('/collections/tmdb/search', { params: { q } })
+    .then((r) => r.data)
+
+export interface TmdbNetworkResult {
+  id: number
+  name: string
+  logo_path: string | null
+  origin_country: string
+}
+
+export const searchTmdbNetworks = (q: string) =>
+  api
+    .get<TmdbNetworkResult[]>('/collections/tmdb/networks/search', { params: { q } })
+    .then((r) => r.data)
 
 // ── Collections ───────────────────────────────────────────────────────────────
 
@@ -99,11 +142,21 @@ export const getCollections = () =>
 export const createCollection = (data: {
   name: string
   rules: Rule[]
+  use_tmdb?: number
+  tmdb_company_id?: number | null
+  tmdb_network_id?: number | null
 }) => api.post<Collection>('/collections', data).then((r) => r.data)
 
 export const updateCollection = (
   id: number,
-  data: { name: string; rules: Rule[]; enabled?: boolean }
+  data: {
+    name: string
+    rules: Rule[]
+    enabled?: boolean
+    use_tmdb?: number
+    tmdb_company_id?: number | null
+    tmdb_network_id?: number | null
+  }
 ) => api.put<Collection>(`/collections/${id}`, data).then((r) => r.data)
 
 export const toggleCollection = (id: number, enabled: boolean) =>

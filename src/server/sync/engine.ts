@@ -8,6 +8,7 @@ import {
   completeSyncRecord,
   CollectionWithRules,
 } from '../db/queries'
+import { getTmdbClient } from '../tmdb/client'
 
 // Where uploaded images are stored on disk
 export const IMAGES_DIR = process.env.IMAGES_DIR ||
@@ -70,13 +71,39 @@ export async function runSync(): Promise<SyncSummary> {
     // Load Alfred collections with rules
     const alfredCollections = getCollections().filter((c) => c.enabled === 1)
 
+    const tmdbApiKey = settings['tmdb_api_key']
+
     for (const collection of alfredCollections) {
-      const result = await syncCollection(
-        client,
-        collection,
-        allItems,
-        embyCollectionMap
-      )
+      let result: CollectionSyncResult
+      const isTmdb = collection.use_tmdb === 1 &&
+        (collection.tmdb_company_id != null || collection.tmdb_network_id != null)
+      if (isTmdb) {
+        if (!tmdbApiKey) {
+          result = {
+            collectionId: '',
+            name: collection.name,
+            added: 0,
+            removed: 0,
+            total: 0,
+            error: 'TMDB API key not configured — skipping TMDB collection',
+          }
+        } else {
+          result = await syncTmdbCollection(
+            client,
+            collection,
+            allItems,
+            embyCollectionMap,
+            tmdbApiKey
+          )
+        }
+      } else {
+        result = await syncCollection(
+          client,
+          collection,
+          allItems,
+          embyCollectionMap
+        )
+      }
       results.push(result)
     }
 
@@ -230,12 +257,12 @@ async function syncCollection(
       }
     } else {
       // Use clear + re-add strategy for correctness
-      await client.clearCollection(embyCollectionId)
+      const clearedCount = await client.clearCollection(embyCollectionId)
       if (matchedIds.length > 0) {
         await client.addToCollection(embyCollectionId, matchedIds)
       }
       added = matchedIds.length
-      removed = 0
+      removed = clearedCount
     }
 
     // Push images to Emby if they exist on disk
@@ -249,7 +276,122 @@ async function syncCollection(
       name: collection.name,
       added: 0,
       removed: 0,
+      total: matchedIds.length,
+      error: message,
+    }
+  }
+
+  return {
+    collectionId: embyCollectionId ?? '',
+    name: collection.name,
+    added,
+    removed,
+    total: matchedIds.length,
+  }
+}
+
+// ── TMDB-backed collection sync ───────────────────────────────────────────────
+
+/**
+ * Syncs a collection whose membership is determined by TMDB data.
+ * - Movies: discovered via production company (`tmdb_company_id`)
+ * - TV shows: discovered via network (`tmdb_network_id`)
+ * At least one of company or network must be set.
+ * Results from both sources are unioned before matching against the Emby library.
+ */
+async function syncTmdbCollection(
+  client: ReturnType<typeof getEmbyClient>,
+  collection: CollectionWithRules,
+  allItems: EmbyItem[],
+  embyCollectionMap: Map<string, string>,
+  tmdbApiKey: string
+): Promise<CollectionSyncResult> {
+  let tmdbImdbIds: Set<string>
+  let tmdbTvdbIds: Set<string>
+  try {
+    const tmdb = getTmdbClient(tmdbApiKey)
+
+    const moviePromise = collection.tmdb_company_id != null
+      ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
+      : Promise.resolve([])
+
+    const tvPromise = collection.tmdb_network_id != null
+      ? tmdb.discoverTvByNetwork(collection.tmdb_network_id)
+      : Promise.resolve([])
+
+    const [movies, shows] = await Promise.all([moviePromise, tvPromise])
+
+    tmdbImdbIds = new Set<string>()
+    tmdbTvdbIds = new Set<string>()
+
+    for (const m of movies) {
+      if (m.imdb_id) tmdbImdbIds.add(m.imdb_id)
+    }
+    for (const s of shows) {
+      const imdbId = s.external_ids?.imdb_id
+      if (imdbId) tmdbImdbIds.add(imdbId)
+      const tvdbId = s.external_ids?.tvdb_id
+      if (tvdbId != null) tmdbTvdbIds.add(String(tvdbId))
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return {
+      collectionId: '',
+      name: collection.name,
+      added: 0,
+      removed: 0,
       total: 0,
+      error: `TMDB fetch failed: ${message}`,
+    }
+  }
+
+  // Match Emby items using IMDb ID first, falling back to TVDB ID.
+  // Emby is inconsistent with casing: Imdb/IMDB, Tvdb/TVDB.
+  const matchedItems = allItems.filter((item) => {
+    const imdb = item.ProviderIds?.Imdb ?? item.ProviderIds?.IMDB
+    if (imdb && tmdbImdbIds.has(imdb)) return true
+    const tvdb = item.ProviderIds?.Tvdb ?? item.ProviderIds?.TVDB
+    if (tvdb && tmdbTvdbIds.has(tvdb)) return true
+    return false
+  })
+  const matchedIds = matchedItems.map((i) => i.Id)
+
+  let embyCollectionId = embyCollectionMap.get(collection.name.toLowerCase())
+  let added = 0
+  let removed = 0
+
+  try {
+    if (embyCollectionId && !(await client.collectionExists(embyCollectionId))) {
+      embyCollectionId = undefined
+      embyCollectionMap.delete(collection.name.toLowerCase())
+    }
+
+    if (!embyCollectionId) {
+      if (matchedIds.length > 0) {
+        embyCollectionId = await client.createCollection(collection.name, matchedIds)
+        added = matchedIds.length
+        embyCollectionMap.set(collection.name.toLowerCase(), embyCollectionId)
+      }
+    } else {
+      const clearedCount = await client.clearCollection(embyCollectionId)
+      if (matchedIds.length > 0) {
+        await client.addToCollection(embyCollectionId, matchedIds)
+      }
+      added = matchedIds.length
+      removed = clearedCount
+    }
+
+    if (embyCollectionId) {
+      await pushImages(client, embyCollectionId, collection)
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return {
+      collectionId: embyCollectionId ?? '',
+      name: collection.name,
+      added: 0,
+      removed: 0,
+      total: matchedIds.length,
       error: message,
     }
   }
@@ -330,6 +472,59 @@ export async function previewCollection(
     if (hasStudioRules && hasGenreRules) return studioMatch && genreMatch
     if (hasStudioRules) return studioMatch
     if (hasGenreRules) return genreMatch
+    return false
+  })
+}
+
+/**
+ * Preview which Emby library items a TMDB-backed collection would contain,
+ * without making any writes to Emby. Throws on TMDB or Emby fetch failure.
+ */
+export async function previewTmdbCollection(
+  collection: CollectionWithRules
+): Promise<EmbyItem[]> {
+  const settings = getAllSettings()
+  const host = settings['emby_host']
+  const apiKey = settings['emby_api_key']
+  const tmdbApiKey = settings['tmdb_api_key']
+
+  if (!host || !apiKey) throw new Error('Emby not configured')
+  if (!tmdbApiKey) throw new Error('TMDB API key not configured')
+
+  const client = getEmbyClient(host, apiKey)
+  const tmdb = getTmdbClient(tmdbApiKey)
+
+  const moviePromise = collection.tmdb_company_id != null
+    ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
+    : Promise.resolve([])
+
+  const tvPromise = collection.tmdb_network_id != null
+    ? tmdb.discoverTvByNetwork(collection.tmdb_network_id)
+    : Promise.resolve([])
+
+  const [allItems, [movies, shows]] = await Promise.all([
+    client.getItems(['Movie', 'Series']),
+    Promise.all([moviePromise, tvPromise]),
+  ])
+
+  const tmdbImdbIds = new Set<string>()
+  const tmdbTvdbIds = new Set<string>()
+
+  for (const m of movies) {
+    if (m.imdb_id) tmdbImdbIds.add(m.imdb_id)
+  }
+  for (const s of shows) {
+    const imdbId = s.external_ids?.imdb_id
+    if (imdbId) tmdbImdbIds.add(imdbId)
+    const tvdbId = s.external_ids?.tvdb_id
+    if (tvdbId != null) tmdbTvdbIds.add(String(tvdbId))
+  }
+
+  return allItems.filter((item) => {
+    const imdb = item.ProviderIds?.Imdb ?? item.ProviderIds?.IMDB
+    if (imdb && tmdbImdbIds.has(imdb)) return true
+    const tvdb = item.ProviderIds?.Tvdb ?? item.ProviderIds?.TVDB
+    if (tvdb && tmdbTvdbIds.has(tvdb)) return true
     return false
   })
 }

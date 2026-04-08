@@ -29,6 +29,9 @@ export function initDb(): void {
       enabled INTEGER DEFAULT 1,
       poster_path TEXT,
       backdrop_path TEXT,
+      use_tmdb INTEGER DEFAULT 0,
+      tmdb_company_id INTEGER,
+      tmdb_network_id INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -49,12 +52,22 @@ export function initDb(): void {
       status TEXT,
       summary TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS tmdb_company_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_name TEXT NOT NULL UNIQUE,
+      tmdb_company_id INTEGER NOT NULL,
+      last_refreshed INTEGER NOT NULL DEFAULT (unixepoch())
+    );
   `)
 
   // Migrations — ALTER TABLE ignores columns that already exist
   const migrations = [
     'ALTER TABLE collections ADD COLUMN poster_path TEXT',
     'ALTER TABLE collections ADD COLUMN backdrop_path TEXT',
+    'ALTER TABLE collections ADD COLUMN use_tmdb INTEGER DEFAULT 0',
+    'ALTER TABLE collections ADD COLUMN tmdb_company_id INTEGER',
+    'ALTER TABLE collections ADD COLUMN tmdb_network_id INTEGER',
     'ALTER TABLE collection_rules ADD COLUMN content_type TEXT DEFAULT "all"',
     'ALTER TABLE collection_rules ADD COLUMN match_type TEXT DEFAULT "any"',
     'ALTER TABLE collection_rules ADD COLUMN tags TEXT DEFAULT ""',
@@ -69,6 +82,7 @@ export function initDb(): void {
     emby_api_key: '',
     sync_schedule: '0 3 * * *',
     sync_enabled: 'false',
+    tmdb_api_key: '',
   }
 
   const insertSetting = db.prepare(

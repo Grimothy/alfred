@@ -44,6 +44,9 @@ export interface CollectionRow {
   enabled: number
   poster_path: string | null
   backdrop_path: string | null
+  use_tmdb: number
+  tmdb_company_id: number | null
+  tmdb_network_id: number | null
   created_at: string
 }
 
@@ -94,12 +97,15 @@ export function getCollectionById(id: number): CollectionWithRules | undefined {
 
 export function createCollection(
   name: string,
-  rules: RuleInput[]
+  rules: RuleInput[],
+  useTmdb = 0,
+  tmdbCompanyId: number | null = null,
+  tmdbNetworkId: number | null = null
 ): CollectionWithRules {
   const tx = db.transaction(() => {
     const result = db
-      .prepare('INSERT INTO collections (name) VALUES (?)')
-      .run(name)
+      .prepare('INSERT INTO collections (name, use_tmdb, tmdb_company_id, tmdb_network_id) VALUES (?, ?, ?, ?)')
+      .run(name, useTmdb, tmdbCompanyId, tmdbNetworkId)
     const id = result.lastInsertRowid as number
     const stmt = db.prepare(
       'INSERT INTO collection_rules (collection_id, field, value, content_type, match_type, tags) VALUES (?, ?, ?, ?, ?, ?)'
@@ -124,14 +130,34 @@ export function updateCollection(
   id: number,
   name: string,
   rules: RuleInput[],
-  enabled?: number
+  enabled?: number,
+  useTmdb?: number,
+  tmdbCompanyId?: number | null,
+  tmdbNetworkId?: number | null
 ): CollectionWithRules | undefined {
   const tx = db.transaction(() => {
-    db.prepare(
-      'UPDATE collections SET name = ?' +
-        (enabled !== undefined ? ', enabled = ?' : '') +
-        ' WHERE id = ?'
-    ).run(...(enabled !== undefined ? [name, enabled, id] : [name, id]))
+    const setParts = ['name = ?']
+    const values: unknown[] = [name]
+
+    if (enabled !== undefined) {
+      setParts.push('enabled = ?')
+      values.push(enabled)
+    }
+    if (useTmdb !== undefined) {
+      setParts.push('use_tmdb = ?')
+      values.push(useTmdb)
+    }
+    if (tmdbCompanyId !== undefined) {
+      setParts.push('tmdb_company_id = ?')
+      values.push(tmdbCompanyId)
+    }
+    if (tmdbNetworkId !== undefined) {
+      setParts.push('tmdb_network_id = ?')
+      values.push(tmdbNetworkId)
+    }
+
+    values.push(id)
+    db.prepare(`UPDATE collections SET ${setParts.join(', ')} WHERE id = ?`).run(...values)
     db.prepare('DELETE FROM collection_rules WHERE collection_id = ?').run(id)
     const stmt = db.prepare(
       'INSERT INTO collection_rules (collection_id, field, value, content_type, match_type, tags) VALUES (?, ?, ?, ?, ?, ?)'

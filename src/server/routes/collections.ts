@@ -11,7 +11,8 @@ import {
   toggleCollection,
   setCollectionImagePath,
 } from '../db/queries'
-import { previewCollectionWithRules, IMAGES_DIR } from '../sync/engine'
+import { previewCollectionWithRules, previewTmdbCollection, IMAGES_DIR } from '../sync/engine'
+import { searchCompanies, searchNetworks } from '../tmdb/cache'
 
 // Ensure images directory exists
 if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true })
@@ -48,20 +49,30 @@ router.get('/', (_req, res) => {
 
 // POST /api/collections
 router.post('/', (req, res) => {
-  const { name, rules } = req.body as {
+  const { name, rules, use_tmdb, tmdb_company_id, tmdb_network_id } = req.body as {
     name: string
     rules: { field: string; value: string }[]
+    use_tmdb?: boolean
+    tmdb_company_id?: number | null
+    tmdb_network_id?: number | null
   }
 
   if (!name?.trim()) {
     return res.status(400).json({ error: 'Collection name is required' })
   }
-  if (!Array.isArray(rules) || rules.length === 0) {
+  const isTmdb = use_tmdb && (tmdb_company_id != null || tmdb_network_id != null)
+  if (!isTmdb && (!Array.isArray(rules) || rules.length === 0)) {
     return res.status(400).json({ error: 'At least one rule is required' })
   }
 
   try {
-    const collection = createCollection(name.trim(), rules)
+    const collection = createCollection(
+      name.trim(),
+      rules ?? [],
+      use_tmdb ? 1 : 0,
+      tmdb_company_id ?? null,
+      tmdb_network_id ?? null
+    )
     return res.status(201).json(collection)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -75,10 +86,13 @@ router.post('/', (req, res) => {
 // PUT /api/collections/:id
 router.put('/:id', (req, res) => {
   const id = parseInt(req.params.id, 10)
-  const { name, rules, enabled } = req.body as {
+  const { name, rules, enabled, use_tmdb, tmdb_company_id, tmdb_network_id } = req.body as {
     name: string
     rules: { field: string; value: string }[]
     enabled?: boolean
+    use_tmdb?: boolean
+    tmdb_company_id?: number | null
+    tmdb_network_id?: number | null
   }
 
   if (!name?.trim()) {
@@ -86,7 +100,16 @@ router.put('/:id', (req, res) => {
   }
 
   const enabledNum = enabled !== undefined ? (enabled ? 1 : 0) : undefined
-  const updated = updateCollection(id, name.trim(), rules ?? [], enabledNum)
+  const useTmdbNum = use_tmdb !== undefined ? (use_tmdb ? 1 : 0) : undefined
+  const updated = updateCollection(
+    id,
+    name.trim(),
+    rules ?? [],
+    enabledNum,
+    useTmdbNum,
+    tmdb_company_id,
+    tmdb_network_id
+  )
   if (!updated) return res.status(404).json({ error: 'Collection not found' })
 
   return res.json(updated)
@@ -118,7 +141,9 @@ router.get('/:id/preview', async (req, res) => {
   if (!col) return res.status(404).json({ error: 'Collection not found' })
 
   try {
-    const items = await previewCollectionWithRules(col.rules)
+    const items = col.use_tmdb === 1
+      ? await previewTmdbCollection(col)
+      : await previewCollectionWithRules(col.rules)
     return res.json({ count: items.length, items })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -140,6 +165,36 @@ router.post('/preview', async (req, res) => {
   try {
     const items = await previewCollectionWithRules(rules)
     return res.json({ count: items.length, items })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: msg })
+  }
+})
+
+// GET /api/collections/tmdb/search?q=Warner+Bros
+router.get('/tmdb/search', async (req, res) => {
+  const q = (req.query.q as string | undefined)?.trim()
+  if (!q || q.length < 2) {
+    return res.status(400).json({ error: 'Query must be at least 2 characters' })
+  }
+  try {
+    const results = await searchCompanies(q)
+    return res.json(results.slice(0, 10))
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: msg })
+  }
+})
+
+// GET /api/collections/tmdb/networks/search?q=Netflix
+router.get('/tmdb/networks/search', async (req, res) => {
+  const q = (req.query.q as string | undefined)?.trim()
+  if (!q || q.length < 2) {
+    return res.status(400).json({ error: 'Query must be at least 2 characters' })
+  }
+  try {
+    const results = await searchNetworks(q)
+    return res.json(results.slice(0, 10))
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return res.status(500).json({ error: msg })

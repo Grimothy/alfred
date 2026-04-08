@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSettings, updateSettings, testConnection } from '../api'
+import { getSettings, updateSettings, testConnection, testTmdbConnection, refreshTmdbCache } from '../api'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import styles from './Settings.module.css'
@@ -42,10 +42,22 @@ export default function Settings() {
   const [testLoading, setTestLoading] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  // TMDB state
+  const [tmdbApiKey, setTmdbApiKey] = useState('')
+  const [showTmdbKey, setShowTmdbKey] = useState(false)
+  const [tmdbTestResult, setTmdbTestResult] = useState<{
+    ok: boolean
+    message: string
+  } | null>(null)
+  const [tmdbTestLoading, setTmdbTestLoading] = useState(false)
+  const [tmdbCacheResult, setTmdbCacheResult] = useState<string | null>(null)
+  const [tmdbCacheLoading, setTmdbCacheLoading] = useState(false)
+
   useEffect(() => {
     if (settings) {
       setHost(settings.emby_host ?? '')
       setApiKey(settings.emby_api_key ?? '')
+      setTmdbApiKey(settings.tmdb_api_key ?? '')
       setSchedule(settings.sync_schedule ?? '0 3 * * *')
       setSyncEnabled(settings.sync_enabled === 'true')
 
@@ -67,7 +79,7 @@ export default function Settings() {
     setTestLoading(true)
     setTestResult(null)
     try {
-      const result = await testConnection()
+      const result = await testConnection(host, apiKey)
       setTestResult({
         ok: true,
         message: `Connected to ${result.ServerName} (v${result.Version})`,
@@ -98,7 +110,42 @@ export default function Settings() {
     if (apiKey && apiKey !== '••••••••') {
       update['emby_api_key'] = apiKey
     }
+    if (tmdbApiKey && tmdbApiKey !== '••••••••') {
+      update['tmdb_api_key'] = tmdbApiKey
+    }
     saveMutation.mutate(update)
+  }
+
+  async function handleTmdbTest() {
+    setTmdbTestLoading(true)
+    setTmdbTestResult(null)
+    try {
+      const result = await testTmdbConnection(tmdbApiKey)
+      setTmdbTestResult({ ok: true, message: `Connected to ${result.name} API v${result.version}` })
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error ?? 'Connection failed'
+      setTmdbTestResult({ ok: false, message: msg })
+    } finally {
+      setTmdbTestLoading(false)
+    }
+  }
+
+  async function handleRefreshTmdbCache() {
+    setTmdbCacheLoading(true)
+    setTmdbCacheResult(null)
+    try {
+      const result = await refreshTmdbCache()
+      setTmdbCacheResult(`Refreshed ${result.refreshed} entries${result.failed > 0 ? `, ${result.failed} failed` : ''}.`)
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error ?? 'Refresh failed'
+      setTmdbCacheResult(msg)
+    } finally {
+      setTmdbCacheLoading(false)
+    }
   }
 
   if (isLoading) {
@@ -170,6 +217,70 @@ export default function Settings() {
               </span>
             )}
           </div>
+        </Card>
+
+        <Card className={styles.section}>
+          <h2 className={styles.sectionTitle}>TMDB Integration</h2>
+
+          <div className={styles.field}>
+            <label className={styles.label}>TMDB API Key</label>
+            <div className={styles.inputRow}>
+              <input
+                className={styles.input}
+                type={showTmdbKey ? 'text' : 'password'}
+                value={tmdbApiKey}
+                onChange={(e) => setTmdbApiKey(e.target.value)}
+                placeholder="Your TMDB API key (v3)"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowTmdbKey((v) => !v)}
+              >
+                {showTmdbKey ? 'Hide' : 'Show'}
+              </Button>
+            </div>
+            <p className={styles.hint}>
+              Required for TMDB-backed collections. Get a free key at themoviedb.org → Settings → API.
+            </p>
+          </div>
+
+          <div className={styles.testRow}>
+            <Button
+              variant="secondary"
+              onClick={handleTmdbTest}
+              loading={tmdbTestLoading}
+              disabled={!tmdbApiKey || tmdbApiKey === '••••••••'}
+            >
+              Test TMDB Key
+            </Button>
+            {tmdbTestResult && (
+              <span
+                className={[
+                  styles.testResult,
+                  tmdbTestResult.ok ? styles.ok : styles.fail,
+                ].join(' ')}
+              >
+                {tmdbTestResult.message}
+              </span>
+            )}
+          </div>
+
+          <div className={styles.testRow}>
+            <Button
+              variant="ghost"
+              onClick={handleRefreshTmdbCache}
+              loading={tmdbCacheLoading}
+            >
+              Refresh Company Cache
+            </Button>
+            {tmdbCacheResult && (
+              <span className={styles.testResult}>{tmdbCacheResult}</span>
+            )}
+          </div>
+          <p className={styles.hint}>
+            Re-resolves all cached TMDB company IDs. Use if company mappings appear stale.
+          </p>
         </Card>
 
         <Card className={styles.section}>

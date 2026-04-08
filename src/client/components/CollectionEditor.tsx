@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getStudios,
@@ -7,8 +7,12 @@ import {
   previewCollectionRules,
   uploadCollectionImage,
   deleteCollectionImage,
+  searchTmdbCompanies,
+  searchTmdbNetworks,
   Collection,
   Rule,
+  TmdbCompanyResult,
+  TmdbNetworkResult,
 } from '../api'
 import Button from './Button'
 import Badge from './Badge'
@@ -38,6 +42,19 @@ export default function CollectionEditor({
 }: CollectionEditorProps) {
   const qc = useQueryClient()
   const [name, setName] = useState('')
+  const [useTmdb, setUseTmdb] = useState(false)
+  const [tmdbCompanyId, setTmdbCompanyId] = useState<number | null>(null)
+  const [tmdbCompanyName, setTmdbCompanyName] = useState('')
+  const [tmdbSearch, setTmdbSearch] = useState('')
+  const [tmdbResults, setTmdbResults] = useState<TmdbCompanyResult[]>([])
+  const [tmdbSearching, setTmdbSearching] = useState(false)
+  const tmdbSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [tmdbNetworkId, setTmdbNetworkId] = useState<number | null>(null)
+  const [tmdbNetworkName, setTmdbNetworkName] = useState('')
+  const [tmdbNetworkSearch, setTmdbNetworkSearch] = useState('')
+  const [tmdbNetworkResults, setTmdbNetworkResults] = useState<TmdbNetworkResult[]>([])
+  const [tmdbNetworkSearching, setTmdbNetworkSearching] = useState(false)
+  const tmdbNetworkSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [selectedStudios, setSelectedStudios] = useState<string[]>([])
   const [selectedGenres, setSelectedGenres] = useState<string[]>([])
   const [studioSearch, setStudioSearch] = useState('')
@@ -73,6 +90,15 @@ export default function CollectionEditor({
   useEffect(() => {
     if (collection) {
       setName(collection.name)
+      setUseTmdb(collection.use_tmdb === 1)
+      setTmdbCompanyId(collection.tmdb_company_id)
+      setTmdbCompanyName('')
+      setTmdbSearch('')
+      setTmdbResults([])
+      setTmdbNetworkId(collection.tmdb_network_id)
+      setTmdbNetworkName('')
+      setTmdbNetworkSearch('')
+      setTmdbNetworkResults([])
       setSelectedStudios(
         collection.rules.filter((r) => r.field === 'studio').map((r) => r.value)
       )
@@ -92,6 +118,15 @@ export default function CollectionEditor({
       setBackdrop(emptySlot(collection.backdrop_path))
     } else {
       setName('')
+      setUseTmdb(false)
+      setTmdbCompanyId(null)
+      setTmdbCompanyName('')
+      setTmdbSearch('')
+      setTmdbResults([])
+      setTmdbNetworkId(null)
+      setTmdbNetworkName('')
+      setTmdbNetworkSearch('')
+      setTmdbNetworkResults([])
       setSelectedStudios([])
       setSelectedGenres([])
       setContentType('all')
@@ -112,6 +147,44 @@ export default function CollectionEditor({
       if (backdrop.preview) URL.revokeObjectURL(backdrop.preview)
     }
   }, [poster.preview, backdrop.preview])
+
+  const handleTmdbSearchChange = useCallback((q: string) => {
+    setTmdbSearch(q)
+    setTmdbCompanyId(null)
+    setTmdbCompanyName('')
+    if (tmdbSearchRef.current) clearTimeout(tmdbSearchRef.current)
+    if (!q.trim()) { setTmdbResults([]); return }
+    tmdbSearchRef.current = setTimeout(async () => {
+      setTmdbSearching(true)
+      try {
+        const results = await searchTmdbCompanies(q)
+        setTmdbResults(results)
+      } catch {
+        setTmdbResults([])
+      } finally {
+        setTmdbSearching(false)
+      }
+    }, 350)
+  }, [])
+
+  const handleTmdbNetworkSearchChange = useCallback((q: string) => {
+    setTmdbNetworkSearch(q)
+    setTmdbNetworkId(null)
+    setTmdbNetworkName('')
+    if (tmdbNetworkSearchRef.current) clearTimeout(tmdbNetworkSearchRef.current)
+    if (!q.trim()) { setTmdbNetworkResults([]); return }
+    tmdbNetworkSearchRef.current = setTimeout(async () => {
+      setTmdbNetworkSearching(true)
+      try {
+        const results = await searchTmdbNetworks(q)
+        setTmdbNetworkResults(results)
+      } catch {
+        setTmdbNetworkResults([])
+      } finally {
+        setTmdbNetworkSearching(false)
+      }
+    }, 350)
+  }, [])
 
   const createMutation = useMutation({
     mutationFn: createCollection,
@@ -222,15 +295,37 @@ export default function CollectionEditor({
   function handleSave() {
     setError(null)
     if (!name.trim()) { setError('Collection name is required'); return }
-    if (selectedStudios.length === 0 && selectedGenres.length === 0 && !tagInput.trim()) {
-      setError('Select at least one studio, genre, or enter tags')
-      return
+    if (useTmdb) {
+      if (!tmdbCompanyId && !tmdbNetworkId) {
+        setError('Select at least one TMDB production company or network')
+        return
+      }
+    } else {
+      if (selectedStudios.length === 0 && selectedGenres.length === 0 && !tagInput.trim()) {
+        setError('Select at least one studio, genre, or enter tags')
+        return
+      }
     }
     const rules = buildRules()
     if (collection) {
-      updateMutation.mutate({ id: collection.id, data: { name, rules } })
+      updateMutation.mutate({
+        id: collection.id,
+        data: {
+          name,
+          rules,
+          use_tmdb: useTmdb ? 1 : 0,
+          tmdb_company_id: useTmdb ? tmdbCompanyId : null,
+          tmdb_network_id: useTmdb ? tmdbNetworkId : null,
+        },
+      })
     } else {
-      createMutation.mutate({ name, rules })
+      createMutation.mutate({
+        name,
+        rules,
+        use_tmdb: useTmdb ? 1 : 0,
+        tmdb_company_id: useTmdb ? tmdbCompanyId : null,
+        tmdb_network_id: useTmdb ? tmdbNetworkId : null,
+      })
     }
   }
 
@@ -278,189 +373,352 @@ export default function CollectionEditor({
             />
           </div>
 
-          {/* Content Type */}
+          {/* TMDB toggle */}
           <div className={styles.field}>
-            <label className={styles.label}>Content Type</label>
-            <div className={styles.radioGroup}>
-              <label className={styles.radioLabel}>
+            <div className={styles.toggleRow}>
+              <div>
+                <div className={styles.label}>Use TMDB Data</div>
+                <div className={styles.fieldHint}>
+                  Match items by who <em>made</em> the content per TMDB, instead of Emby studio metadata.
+                </div>
+              </div>
+              <label className={styles.switch}>
                 <input
-                  type="radio"
-                  name="contentType"
-                  value="all"
-                  checked={contentType === 'all'}
-                  onChange={() => setContentType('all')}
+                  type="checkbox"
+                  checked={useTmdb}
+                  onChange={(e) => {
+                    setUseTmdb(e.target.checked)
+                    setTmdbCompanyId(null)
+                    setTmdbCompanyName('')
+                    setTmdbSearch('')
+                    setTmdbResults([])
+                    setTmdbNetworkId(null)
+                    setTmdbNetworkName('')
+                    setTmdbNetworkSearch('')
+                    setTmdbNetworkResults([])
+                  }}
                 />
-                All
-              </label>
-              <label className={styles.radioLabel}>
-                <input
-                  type="radio"
-                  name="contentType"
-                  value="movie"
-                  checked={contentType === 'movie'}
-                  onChange={() => setContentType('movie')}
-                />
-                Movies Only
-              </label>
-              <label className={styles.radioLabel}>
-                <input
-                  type="radio"
-                  name="contentType"
-                  value="series"
-                  checked={contentType === 'series'}
-                  onChange={() => setContentType('series')}
-                />
-                TV Only
+                <span className={styles.switchTrack}>
+                  <span className={styles.switchThumb} />
+                </span>
               </label>
             </div>
           </div>
 
-          {/* Studios */}
-          <div className={styles.field}>
-            <label className={styles.label}>Studios / Networks</label>
-            {selectedStudios.length > 0 && (
-              <div className={styles.selected}>
-                {selectedStudios.map((s) => (
-                  <Badge
-                    key={s}
-                    label={s}
-                    variant="gold"
-                    onRemove={() =>
-                      setSelectedStudios((prev) => prev.filter((x) => x !== s))
-                    }
-                  />
-                ))}
-              </div>
-            )}
-            <div className={styles.matchTypeRow}>
-              <span className={styles.matchTypeLabel}>Matching:</span>
-              <label className={styles.radioLabel}>
-                <input
-                  type="radio"
-                  name="studioMatchType"
-                  value="any"
-                  checked={studioMatchType === 'any'}
-                  onChange={() => setStudioMatchType('any')}
-                />
-                Any Studio
-              </label>
-              <label className={styles.radioLabel}>
-                <input
-                  type="radio"
-                  name="studioMatchType"
-                  value="primary"
-                  checked={studioMatchType === 'primary'}
-                  onChange={() => setStudioMatchType('primary')}
-                />
-                Primary Only
-              </label>
-              <label className={styles.radioLabel}>
-                <input
-                  type="radio"
-                  name="studioMatchType"
-                  value="secondary_safe"
-                  checked={studioMatchType === 'secondary_safe'}
-                  onChange={() => setStudioMatchType('secondary_safe')}
-                />
-                Primary or Secondary (no streaming)
-              </label>
-            </div>
-            <input
-              className={styles.input}
-              value={studioSearch}
-              onChange={(e) => setStudioSearch(e.target.value)}
-              placeholder="Search studios..."
-            />
-            <div className={styles.studioList}>
-              {filteredStudios.slice(0, 50).map((s) => {
-                const checked = selectedStudios.includes(s.name)
-                return (
-                  <button
-                    key={s.name}
-                    className={[
-                      styles.studioOption,
-                      checked ? styles.studioOptionSelected : '',
-                    ].filter(Boolean).join(' ')}
-                    onClick={() => {
-                      setSelectedStudios((prev) =>
-                        checked ? prev.filter((x) => x !== s.name) : [...prev, s.name]
-                      )
-                    }}
-                  >
-                    <span className={styles.studioCheckbox}>{checked ? '✓' : ''}</span>
-                    <span className={styles.studioName}>{s.name}</span>
-                    <span className={styles.studioCount}>{s.movies + s.series} items</span>
-                  </button>
-                )
-              })}
-              {filteredStudios.length === 0 && studioSearch && (
-                <div className={styles.noResults}>No studios match "{studioSearch}"</div>
-              )}
-            </div>
-          </div>
-
-          {/* Genres */}
-          <div className={styles.field}>
-            <label className={styles.label}>Genres (optional)</label>
-            {selectedGenres.length > 0 && (
-              <div className={styles.selected}>
-                {selectedGenres.map((g) => (
-                  <Badge
-                    key={g}
-                    label={g}
-                    variant="gold"
-                    onRemove={() =>
-                      setSelectedGenres((prev) => prev.filter((x) => x !== g))
-                    }
-                  />
-                ))}
-              </div>
-            )}
-            <input
-              className={styles.input}
-              value={genreSearch}
-              onChange={(e) => setGenreSearch(e.target.value)}
-              placeholder="Search genres..."
-            />
-            <div className={styles.studioList}>
-              {['Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery', 'Romance', 'Science Fiction', 'Thriller', 'War', 'Western']
-                .filter((g) => g.toLowerCase().includes(genreSearch.toLowerCase()))
-                .map((g) => {
-                  const checked = selectedGenres.includes(g)
-                  return (
-                    <button
-                      key={g}
-                      className={[
-                        styles.studioOption,
-                        checked ? styles.studioOptionSelected : '',
-                      ].filter(Boolean).join(' ')}
-                      onClick={() => {
-                        setSelectedGenres((prev) =>
-                          checked ? prev.filter((x) => x !== g) : [...prev, g]
-                        )
+          {useTmdb ? (
+            /* ── TMDB pickers ── */
+            <>
+              {/* Production Company picker */}
+              <div className={styles.field}>
+                <label className={styles.label}>Production Company (Movies)</label>
+                <div className={styles.fieldHint}>
+                  Matches movies produced by this company. Leave blank to skip movie matching.
+                </div>
+                {tmdbCompanyId && tmdbCompanyName && (
+                  <div className={styles.selected}>
+                    <Badge
+                      label={tmdbCompanyName}
+                      variant="gold"
+                      onRemove={() => {
+                        setTmdbCompanyId(null)
+                        setTmdbCompanyName('')
+                        setTmdbSearch('')
+                        setTmdbResults([])
                       }}
-                    >
-                      <span className={styles.studioCheckbox}>{checked ? '✓' : ''}</span>
-                      <span className={styles.studioName}>{g}</span>
-                    </button>
-                  )
-                })}
-            </div>
-          </div>
+                    />
+                  </div>
+                )}
+                {!tmdbCompanyId && (
+                  <>
+                    <input
+                      className={styles.input}
+                      value={tmdbSearch}
+                      onChange={(e) => handleTmdbSearchChange(e.target.value)}
+                      placeholder="Search TMDB companies… (e.g. A24, Miramax)"
+                    />
+                    {tmdbSearching && (
+                      <div className={styles.noResults}>Searching…</div>
+                    )}
+                    {!tmdbSearching && tmdbResults.length > 0 && (
+                      <div className={styles.studioList}>
+                        {tmdbResults.slice(0, 20).map((r) => (
+                          <button
+                            key={r.id}
+                            className={styles.studioOption}
+                            onClick={() => {
+                              setTmdbCompanyId(r.id)
+                              setTmdbCompanyName(r.name)
+                              setTmdbSearch('')
+                              setTmdbResults([])
+                            }}
+                          >
+                            <span className={styles.studioName}>{r.name}</span>
+                            <span className={styles.studioCount}>
+                              {r.origin_country ? `(${r.origin_country})` : ''}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {!tmdbSearching && tmdbSearch && tmdbResults.length === 0 && (
+                      <div className={styles.noResults}>No companies match "{tmdbSearch}"</div>
+                    )}
+                  </>
+                )}
+                <div className={styles.fieldHint}>
+                  TMDB company ID: {tmdbCompanyId ?? '—'}
+                </div>
+              </div>
 
-          {/* Tags */}
-          <div className={styles.field}>
-            <label className={styles.label}>Tags (for original content detection)</label>
-            <input
-              className={styles.input}
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              placeholder="e.g. Netflix Original, Hulu Original, Original"
-            />
-            <div className={styles.fieldHint}>
-              Separate multiple tags with commas. Items must have ALL listed tags to match.
-            </div>
-          </div>
+              {/* Network picker */}
+              <div className={styles.field}>
+                <label className={styles.label}>Network (TV Shows)</label>
+                <div className={styles.fieldHint}>
+                  Matches TV shows associated with this network. Leave blank to skip TV matching.
+                </div>
+                {tmdbNetworkId && tmdbNetworkName && (
+                  <div className={styles.selected}>
+                    <Badge
+                      label={tmdbNetworkName}
+                      variant="gold"
+                      onRemove={() => {
+                        setTmdbNetworkId(null)
+                        setTmdbNetworkName('')
+                        setTmdbNetworkSearch('')
+                        setTmdbNetworkResults([])
+                      }}
+                    />
+                  </div>
+                )}
+                {!tmdbNetworkId && (
+                  <>
+                    <input
+                      className={styles.input}
+                      value={tmdbNetworkSearch}
+                      onChange={(e) => handleTmdbNetworkSearchChange(e.target.value)}
+                      placeholder="Search TMDB networks… (e.g. Netflix, HBO)"
+                    />
+                    {tmdbNetworkSearching && (
+                      <div className={styles.noResults}>Searching…</div>
+                    )}
+                    {!tmdbNetworkSearching && tmdbNetworkResults.length > 0 && (
+                      <div className={styles.studioList}>
+                        {tmdbNetworkResults.slice(0, 20).map((r) => (
+                          <button
+                            key={r.id}
+                            className={styles.studioOption}
+                            onClick={() => {
+                              setTmdbNetworkId(r.id)
+                              setTmdbNetworkName(r.name)
+                              setTmdbNetworkSearch('')
+                              setTmdbNetworkResults([])
+                            }}
+                          >
+                            <span className={styles.studioName}>{r.name}</span>
+                            <span className={styles.studioCount}>
+                              {r.origin_country ? `(${r.origin_country})` : ''}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {!tmdbNetworkSearching && tmdbNetworkSearch && tmdbNetworkResults.length === 0 && (
+                      <div className={styles.noResults}>No networks match "{tmdbNetworkSearch}"</div>
+                    )}
+                  </>
+                )}
+                <div className={styles.fieldHint}>
+                  TMDB network ID: {tmdbNetworkId ?? '—'}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Content Type */}
+              <div className={styles.field}>
+                <label className={styles.label}>Content Type</label>
+                <div className={styles.radioGroup}>
+                  <label className={styles.radioLabel}>
+                    <input
+                      type="radio"
+                      name="contentType"
+                      value="all"
+                      checked={contentType === 'all'}
+                      onChange={() => setContentType('all')}
+                    />
+                    All
+                  </label>
+                  <label className={styles.radioLabel}>
+                    <input
+                      type="radio"
+                      name="contentType"
+                      value="movie"
+                      checked={contentType === 'movie'}
+                      onChange={() => setContentType('movie')}
+                    />
+                    Movies Only
+                  </label>
+                  <label className={styles.radioLabel}>
+                    <input
+                      type="radio"
+                      name="contentType"
+                      value="series"
+                      checked={contentType === 'series'}
+                      onChange={() => setContentType('series')}
+                    />
+                    TV Only
+                  </label>
+                </div>
+              </div>
+
+              {/* Studios */}
+              <div className={styles.field}>
+                <label className={styles.label}>Studios / Networks</label>
+                {selectedStudios.length > 0 && (
+                  <div className={styles.selected}>
+                    {selectedStudios.map((s) => (
+                      <Badge
+                        key={s}
+                        label={s}
+                        variant="gold"
+                        onRemove={() =>
+                          setSelectedStudios((prev) => prev.filter((x) => x !== s))
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+                <div className={styles.matchTypeRow}>
+                  <span className={styles.matchTypeLabel}>Matching:</span>
+                  <label className={styles.radioLabel}>
+                    <input
+                      type="radio"
+                      name="studioMatchType"
+                      value="any"
+                      checked={studioMatchType === 'any'}
+                      onChange={() => setStudioMatchType('any')}
+                    />
+                    Any Studio
+                  </label>
+                  <label className={styles.radioLabel}>
+                    <input
+                      type="radio"
+                      name="studioMatchType"
+                      value="primary"
+                      checked={studioMatchType === 'primary'}
+                      onChange={() => setStudioMatchType('primary')}
+                    />
+                    Primary Only
+                  </label>
+                  <label className={styles.radioLabel}>
+                    <input
+                      type="radio"
+                      name="studioMatchType"
+                      value="secondary_safe"
+                      checked={studioMatchType === 'secondary_safe'}
+                      onChange={() => setStudioMatchType('secondary_safe')}
+                    />
+                    Primary or Secondary (no streaming)
+                  </label>
+                </div>
+                <input
+                  className={styles.input}
+                  value={studioSearch}
+                  onChange={(e) => setStudioSearch(e.target.value)}
+                  placeholder="Search studios..."
+                />
+                <div className={styles.studioList}>
+                  {filteredStudios.slice(0, 50).map((s) => {
+                    const checked = selectedStudios.includes(s.name)
+                    return (
+                      <button
+                        key={s.name}
+                        className={[
+                          styles.studioOption,
+                          checked ? styles.studioOptionSelected : '',
+                        ].filter(Boolean).join(' ')}
+                        onClick={() => {
+                          setSelectedStudios((prev) =>
+                            checked ? prev.filter((x) => x !== s.name) : [...prev, s.name]
+                          )
+                        }}
+                      >
+                        <span className={styles.studioCheckbox}>{checked ? '✓' : ''}</span>
+                        <span className={styles.studioName}>{s.name}</span>
+                        <span className={styles.studioCount}>{s.movies + s.series} items</span>
+                      </button>
+                    )
+                  })}
+                  {filteredStudios.length === 0 && studioSearch && (
+                    <div className={styles.noResults}>No studios match "{studioSearch}"</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Genres */}
+              <div className={styles.field}>
+                <label className={styles.label}>Genres (optional)</label>
+                {selectedGenres.length > 0 && (
+                  <div className={styles.selected}>
+                    {selectedGenres.map((g) => (
+                      <Badge
+                        key={g}
+                        label={g}
+                        variant="gold"
+                        onRemove={() =>
+                          setSelectedGenres((prev) => prev.filter((x) => x !== g))
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+                <input
+                  className={styles.input}
+                  value={genreSearch}
+                  onChange={(e) => setGenreSearch(e.target.value)}
+                  placeholder="Search genres..."
+                />
+                <div className={styles.studioList}>
+                  {['Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery', 'Romance', 'Science Fiction', 'Thriller', 'War', 'Western']
+                    .filter((g) => g.toLowerCase().includes(genreSearch.toLowerCase()))
+                    .map((g) => {
+                      const checked = selectedGenres.includes(g)
+                      return (
+                        <button
+                          key={g}
+                          className={[
+                            styles.studioOption,
+                            checked ? styles.studioOptionSelected : '',
+                          ].filter(Boolean).join(' ')}
+                          onClick={() => {
+                            setSelectedGenres((prev) =>
+                              checked ? prev.filter((x) => x !== g) : [...prev, g]
+                            )
+                          }}
+                        >
+                          <span className={styles.studioCheckbox}>{checked ? '✓' : ''}</span>
+                          <span className={styles.studioName}>{g}</span>
+                        </button>
+                      )
+                    })}
+                </div>
+              </div>
+
+              {/* Tags */}
+              <div className={styles.field}>
+                <label className={styles.label}>Tags (for original content detection)</label>
+                <input
+                  className={styles.input}
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  placeholder="e.g. Netflix Original, Hulu Original, Original"
+                />
+                <div className={styles.fieldHint}>
+                  Separate multiple tags with commas. Items must have ALL listed tags to match.
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Images */}
           <div className={styles.imagesRow}>
@@ -514,9 +772,9 @@ export default function CollectionEditor({
             variant="ghost"
             onClick={handlePreview}
             loading={previewLoading}
-            disabled={selectedStudios.length === 0 && selectedGenres.length === 0 && !tagInput.trim()}
+            disabled={useTmdb || (selectedStudios.length === 0 && selectedGenres.length === 0 && !tagInput.trim())}
           >
-            Preview
+            {useTmdb ? 'Preview (n/a for TMDB)' : 'Preview'}
           </Button>
           <div className={styles.footerActions}>
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
