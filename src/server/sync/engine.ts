@@ -311,9 +311,10 @@ async function syncTmdbCollection(
   try {
     const tmdb = getTmdbClient(tmdbApiKey)
 
-  const moviePromise = collection.tmdb_company_id != null
-    ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
-    : Promise.resolve([])
+  const moviePromise =
+    collection.tmdb_company_id != null && collection.tmdb_network_id == null
+      ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
+      : Promise.resolve([])
 
   const tvNetworkPromise = collection.tmdb_network_id != null
     ? tmdb.discoverTvByNetwork(collection.tmdb_network_id)
@@ -504,9 +505,10 @@ export async function previewTmdbCollection(
   const client = getEmbyClient(host, apiKey)
   const tmdb = getTmdbClient(tmdbApiKey)
 
-  const moviePromise = collection.tmdb_company_id != null
-    ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
-    : Promise.resolve([])
+  const moviePromise =
+    collection.tmdb_company_id != null && collection.tmdb_network_id == null
+      ? tmdb.discoverMoviesByCompany(collection.tmdb_company_id)
+      : Promise.resolve([])
 
   const tvNetworkPromise = collection.tmdb_network_id != null
     ? tmdb.discoverTvByNetwork(collection.tmdb_network_id)
