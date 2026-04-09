@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/Grimothy/alfred/compare/alfred-v1.0.1...alfred-v1.0.2) (2026-04-09)
+
+
+### Bug Fixes
+
+* handle Emby's mixed-case Imdb provider ID in TMDB matching ([0eebf12](https://github.com/Grimothy/alfred/commit/0eebf1273bff95d3b331b3b3b06c9174c277081e))
+
 ## [1.0.1](https://github.com/Grimothy/alfred/compare/alfred-v1.0.0...alfred-v1.0.1) (2026-04-09)
 
 
