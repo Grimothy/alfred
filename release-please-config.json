@@ -1,11 +1,6 @@
 {
   "release-type": "node",
-  "include-component-in-tag": false,
-  "changelog-sections": ["feat", "fix", "perf", "refactor", "docs", "test", "chore", "revert"],
   "packages": {
-    ".": {
-      "version-file": "package.json",
-      "changelog-path": "CHANGELOG.md"
-    }
+    ".": {}
   }
 }
