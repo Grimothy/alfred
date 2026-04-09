@@ -62,6 +62,7 @@ export default function CollectionEditor({
   const [tagInput, setTagInput] = useState('')
   const [contentType, setContentType] = useState<'all' | 'movie' | 'series'>('all')
   const [studioMatchType, setStudioMatchType] = useState<'any' | 'primary' | 'secondary_safe'>('any')
+  const [removeFromEmby, setRemoveFromEmby] = useState(true)
   const [poster, setPoster] = useState<ImageSlot>(emptySlot())
   const [backdrop, setBackdrop] = useState<ImageSlot>(emptySlot())
   const [previewResult, setPreviewResult] = useState<{
@@ -114,6 +115,7 @@ export default function CollectionEditor({
       )
       const tagRule = collection.rules.find((r) => r.field === 'tag')
       setTagInput(tagRule?.tags || '')
+      setRemoveFromEmby(collection.remove_from_emby !== 0)
       setPoster(emptySlot(collection.poster_path))
       setBackdrop(emptySlot(collection.backdrop_path))
     } else {
@@ -132,6 +134,7 @@ export default function CollectionEditor({
       setContentType('all')
       setStudioMatchType('any')
       setTagInput('')
+      setRemoveFromEmby(true)
       setPoster(emptySlot())
       setBackdrop(emptySlot())
     }
@@ -325,6 +328,7 @@ export default function CollectionEditor({
         use_tmdb: useTmdb ? 1 : 0,
         tmdb_company_id: useTmdb ? tmdbCompanyId : null,
         tmdb_network_id: useTmdb ? tmdbNetworkId : null,
+        remove_from_emby: removeFromEmby ? 1 : 0,
       })
     }
   }
@@ -719,6 +723,28 @@ export default function CollectionEditor({
               </div>
             </>
           )}
+
+          {/* Sync behavior */}
+          <div className={styles.field}>
+            <div className={styles.toggleRow}>
+              <div>
+                <div className={styles.label}>Remove items from Emby</div>
+                <div className={styles.fieldHint}>
+                  When enabled, items removed from this collection during sync will also be removed from the Emby collection. When disabled, items are only ever added — never removed.
+                </div>
+              </div>
+              <label className={styles.switch}>
+                <input
+                  type="checkbox"
+                  checked={removeFromEmby}
+                  onChange={(e) => setRemoveFromEmby(e.target.checked)}
+                />
+                <span className={styles.switchTrack}>
+                  <span className={styles.switchThumb} />
+                </span>
+              </label>
+            </div>
+          </div>
 
           {/* Images */}
           <div className={styles.imagesRow}>

@@ -26,6 +26,7 @@ export interface Collection {
   use_tmdb: number
   tmdb_company_id: number | null
   tmdb_network_id: number | null
+  remove_from_emby: number
   created_at: string
   rules: Rule[]
 }
@@ -145,6 +146,7 @@ export const createCollection = (data: {
   use_tmdb?: number
   tmdb_company_id?: number | null
   tmdb_network_id?: number | null
+  remove_from_emby?: number
 }) => api.post<Collection>('/collections', data).then((r) => r.data)
 
 export const updateCollection = (
@@ -156,6 +158,7 @@ export const updateCollection = (
     use_tmdb?: number
     tmdb_company_id?: number | null
     tmdb_network_id?: number | null
+    remove_from_emby?: number
   }
 ) => api.put<Collection>(`/collections/${id}`, data).then((r) => r.data)
 

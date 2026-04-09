@@ -47,6 +47,7 @@ export interface CollectionRow {
   use_tmdb: number
   tmdb_company_id: number | null
   tmdb_network_id: number | null
+  remove_from_emby: number
   created_at: string
 }
 
@@ -100,12 +101,13 @@ export function createCollection(
   rules: RuleInput[],
   useTmdb = 0,
   tmdbCompanyId: number | null = null,
-  tmdbNetworkId: number | null = null
+  tmdbNetworkId: number | null = null,
+  removeFromEmby = 1
 ): CollectionWithRules {
   const tx = db.transaction(() => {
     const result = db
-      .prepare('INSERT INTO collections (name, use_tmdb, tmdb_company_id, tmdb_network_id) VALUES (?, ?, ?, ?)')
-      .run(name, useTmdb, tmdbCompanyId, tmdbNetworkId)
+      .prepare('INSERT INTO collections (name, use_tmdb, tmdb_company_id, tmdb_network_id, remove_from_emby) VALUES (?, ?, ?, ?, ?)')
+      .run(name, useTmdb, tmdbCompanyId, tmdbNetworkId, removeFromEmby)
     const id = result.lastInsertRowid as number
     const stmt = db.prepare(
       'INSERT INTO collection_rules (collection_id, field, value, content_type, match_type, tags) VALUES (?, ?, ?, ?, ?, ?)'
@@ -133,7 +135,8 @@ export function updateCollection(
   enabled?: number,
   useTmdb?: number,
   tmdbCompanyId?: number | null,
-  tmdbNetworkId?: number | null
+  tmdbNetworkId?: number | null,
+  removeFromEmby?: number
 ): CollectionWithRules | undefined {
   const tx = db.transaction(() => {
     const setParts = ['name = ?']
@@ -154,6 +157,10 @@ export function updateCollection(
     if (tmdbNetworkId !== undefined) {
       setParts.push('tmdb_network_id = ?')
       values.push(tmdbNetworkId)
+    }
+    if (removeFromEmby !== undefined) {
+      setParts.push('remove_from_emby = ?')
+      values.push(removeFromEmby)
     }
 
     values.push(id)

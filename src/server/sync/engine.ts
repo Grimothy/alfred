@@ -255,14 +255,24 @@ async function syncCollection(
         added = matchedIds.length
         embyCollectionMap.set(collection.name.toLowerCase(), embyCollectionId)
       }
-    } else {
-      // Use clear + re-add strategy for correctness
+    } else if (collection.remove_from_emby === 1) {
+      // Remove mode: clear all items then re-add currently matched ones
       const clearedCount = await client.clearCollection(embyCollectionId)
       if (matchedIds.length > 0) {
         await client.addToCollection(embyCollectionId, matchedIds)
       }
       added = matchedIds.length
       removed = clearedCount
+    } else {
+      // Additive mode: only add items not already in the collection
+      const currentIds = await client.getCollectionItemIds(embyCollectionId)
+      const currentSet = new Set(currentIds)
+      const newIds = matchedIds.filter((id) => !currentSet.has(id))
+      if (newIds.length > 0) {
+        await client.addToCollection(embyCollectionId, newIds)
+      }
+      added = newIds.length
+      removed = 0
     }
 
     // Push images to Emby if they exist on disk
@@ -386,13 +396,22 @@ async function syncTmdbCollection(
         added = matchedIds.length
         embyCollectionMap.set(collection.name.toLowerCase(), embyCollectionId)
       }
-    } else {
+    } else if (collection.remove_from_emby === 1) {
       const clearedCount = await client.clearCollection(embyCollectionId)
       if (matchedIds.length > 0) {
         await client.addToCollection(embyCollectionId, matchedIds)
       }
       added = matchedIds.length
       removed = clearedCount
+    } else {
+      const currentIds = await client.getCollectionItemIds(embyCollectionId)
+      const currentSet = new Set(currentIds)
+      const newIds = matchedIds.filter((id) => !currentSet.has(id))
+      if (newIds.length > 0) {
+        await client.addToCollection(embyCollectionId, newIds)
+      }
+      added = newIds.length
+      removed = 0
     }
 
     if (embyCollectionId) {

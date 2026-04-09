@@ -49,12 +49,13 @@ router.get('/', (_req, res) => {
 
 // POST /api/collections
 router.post('/', (req, res) => {
-  const { name, rules, use_tmdb, tmdb_company_id, tmdb_network_id } = req.body as {
+  const { name, rules, use_tmdb, tmdb_company_id, tmdb_network_id, remove_from_emby } = req.body as {
     name: string
     rules: { field: string; value: string }[]
     use_tmdb?: boolean
     tmdb_company_id?: number | null
     tmdb_network_id?: number | null
+    remove_from_emby?: boolean
   }
 
   if (!name?.trim()) {
@@ -71,7 +72,8 @@ router.post('/', (req, res) => {
       rules ?? [],
       use_tmdb ? 1 : 0,
       tmdb_company_id ?? null,
-      tmdb_network_id ?? null
+      tmdb_network_id ?? null,
+      remove_from_emby !== false ? 1 : 0
     )
     return res.status(201).json(collection)
   } catch (err: unknown) {
@@ -86,13 +88,14 @@ router.post('/', (req, res) => {
 // PUT /api/collections/:id
 router.put('/:id', (req, res) => {
   const id = parseInt(req.params.id, 10)
-  const { name, rules, enabled, use_tmdb, tmdb_company_id, tmdb_network_id } = req.body as {
+  const { name, rules, enabled, use_tmdb, tmdb_company_id, tmdb_network_id, remove_from_emby } = req.body as {
     name: string
     rules: { field: string; value: string }[]
     enabled?: boolean
     use_tmdb?: boolean
     tmdb_company_id?: number | null
     tmdb_network_id?: number | null
+    remove_from_emby?: boolean
   }
 
   if (!name?.trim()) {
@@ -101,6 +104,7 @@ router.put('/:id', (req, res) => {
 
   const enabledNum = enabled !== undefined ? (enabled ? 1 : 0) : undefined
   const useTmdbNum = use_tmdb !== undefined ? (use_tmdb ? 1 : 0) : undefined
+  const removeFromEmbyNum = remove_from_emby !== undefined ? (remove_from_emby ? 1 : 0) : undefined
   const updated = updateCollection(
     id,
     name.trim(),
@@ -108,7 +112,8 @@ router.put('/:id', (req, res) => {
     enabledNum,
     useTmdbNum,
     tmdb_company_id,
-    tmdb_network_id
+    tmdb_network_id,
+    removeFromEmbyNum
   )
   if (!updated) return res.status(404).json({ error: 'Collection not found' })
 

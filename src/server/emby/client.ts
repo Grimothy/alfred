@@ -137,6 +137,16 @@ export class EmbyClient {
     return currentIds.length
   }
 
+  async getCollectionItemIds(collectionId: string): Promise<string[]> {
+    const res = await this.http.get('/emby/Items', {
+      params: {
+        ParentId: collectionId,
+        Recursive: false,
+      },
+    })
+    return (res.data.Items ?? []).map((i: EmbyItem) => i.Id)
+  }
+
   // ── Images ───────────────────────────────────────────────────────────────────
 
   async deleteCollectionImage(

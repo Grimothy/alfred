@@ -71,6 +71,7 @@ export function initDb(): void {
     'ALTER TABLE collection_rules ADD COLUMN content_type TEXT DEFAULT "all"',
     'ALTER TABLE collection_rules ADD COLUMN match_type TEXT DEFAULT "any"',
     'ALTER TABLE collection_rules ADD COLUMN tags TEXT DEFAULT ""',
+    'ALTER TABLE collections ADD COLUMN remove_from_emby INTEGER DEFAULT 1',
   ]
   for (const sql of migrations) {
     try { db.exec(sql) } catch { /* column already exists */ }
