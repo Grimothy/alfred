@@ -528,20 +528,29 @@ export async function previewTmdbCollection(
   const tv_tvdbIds = new Set<string>()
 
   for (const m of movies) {
-    if (m.imdb_id) tmdbImdbIds.add(m.imdb_id)
+    if (m.imdb_id) movie_imdbIds.add(m.imdb_id)
   }
   for (const s of shows) {
     const imdbId = s.external_ids?.imdb_id
-    if (imdbId) tmdbImdbIds.add(imdbId)
+    if (imdbId) tv_imdbIds.add(imdbId)
     const tvdbId = s.external_ids?.tvdb_id
     if (tvdbId != null) tv_tvdbIds.add(String(tvdbId))
   }
 
   return allItems.filter((item) => {
-    const imdb = item.ProviderIds?.Imdb ?? item.ProviderIds?.IMDB
-    if (imdb && tmdbImdbIds.has(imdb)) return true
+    const isMovie = item.Type === 'Movie'
+    const isSeries = item.Type === 'Series'
+    const imdb = item.ProviderIds?.IMDB
     const tvdb = item.ProviderIds?.Tvdb ?? item.ProviderIds?.TVDB
-    if (tvdb && tv_tvdbIds.has(tvdb)) return true
+
+    if (isMovie) {
+      if (imdb && movie_imdbIds.has(imdb)) return true
+      if (tvdb && movie_tvdbIds.has(tvdb)) return true
+    }
+    if (isSeries) {
+      if (imdb && tv_imdbIds.has(imdb)) return true
+      if (tvdb && tv_tvdbIds.has(tvdb)) return true
+    }
     return false
   })
 }
