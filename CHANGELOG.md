@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.1](https://github.com/Grimothy/alfred/compare/alfred-v1.0.0...alfred-v1.0.1) (2026-04-09)
+
+
+### Bug Fixes
+
+* correct release-please manifest format and workflow triggers ([6b81c4f](https://github.com/Grimothy/alfred/commit/6b81c4f69c4d677e72d780fccf765f742ed3f924))
+
+## Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
