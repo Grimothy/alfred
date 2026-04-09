@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/Grimothy/alfred/compare/alfred-v1.0.2...alfred-v1.0.3) (2026-04-09)
+
+
+### Bug Fixes
+
+* use named Docker volume for data persistence ([f73d1b3](https://github.com/Grimothy/alfred/commit/f73d1b31b5f3a2250adaa9d40b03cd9591172a5f))
+
 ## [1.0.2](https://github.com/Grimothy/alfred/compare/alfred-v1.0.1...alfred-v1.0.2) (2026-04-09)
 
 
