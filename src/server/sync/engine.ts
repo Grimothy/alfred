@@ -396,7 +396,7 @@ async function syncTmdbCollection(
   const matchedItems = allItems.filter((item) => {
     const isMovie = item.Type === 'Movie'
     const isSeries = item.Type === 'Series'
-    const imdb = item.ProviderIds?.IMDB
+    const imdb = item.ProviderIds?.Imdb ?? item.ProviderIds?.IMDB
     const tvdb = item.ProviderIds?.Tvdb ?? item.ProviderIds?.TVDB
 
     if (isMovie) {
@@ -605,7 +605,7 @@ export async function previewTmdbCollection(
   return allItems.filter((item) => {
     const isMovie = item.Type === 'Movie'
     const isSeries = item.Type === 'Series'
-    const imdb = item.ProviderIds?.IMDB
+    const imdb = item.ProviderIds?.Imdb ?? item.ProviderIds?.IMDB
     const tvdb = item.ProviderIds?.Tvdb ?? item.ProviderIds?.TVDB
 
     if (isMovie) {
