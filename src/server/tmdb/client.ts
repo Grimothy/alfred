@@ -150,11 +150,12 @@ export class TmdbClient {
   // ── Discovery ────────────────────────────────────────────────────────────────
 
   /**
-   * Returns all movies produced by a given TMDB company ID.
+   * Returns all movies produced by any of the given TMDB company IDs (OR logic).
    * Paginates automatically — may make multiple requests for large studios.
    * Each movie includes imdb_id (via external_ids) for cross-referencing with Emby.
    */
-  async discoverMoviesByCompany(companyId: number): Promise<TmdbMovie[]> {
+  async discoverMoviesByCompany(companyIds: number[]): Promise<TmdbMovie[]> {
+    if (companyIds.length === 0) return []
     const movies: TmdbMovie[] = []
     let page = 1
     let totalPages = 1
@@ -162,7 +163,7 @@ export class TmdbClient {
     while (page <= totalPages) {
       const res = await this.http.get('/discover/movie', {
         params: {
-          with_companies: companyId,
+          with_companies: companyIds.join('|'),
           sort_by: 'popularity.desc',
           page,
           'vote_count.gte': 0,
@@ -190,10 +191,11 @@ export class TmdbClient {
   }
 
   /**
-   * Returns all TV shows on a given TMDB network ID.
+   * Returns all TV shows on any of the given TMDB network IDs (OR logic).
    * Each show includes imdb_id and tvdb_id via external_ids.
    */
-  async discoverTvByNetwork(networkId: number): Promise<TmdbTvShow[]> {
+  async discoverTvByNetwork(networkIds: number[]): Promise<TmdbTvShow[]> {
+    if (networkIds.length === 0) return []
     const shows: TmdbTvShow[] = []
     let page = 1
     let totalPages = 1
@@ -201,7 +203,7 @@ export class TmdbClient {
     while (page <= totalPages) {
       const res = await this.http.get('/discover/tv', {
         params: {
-          with_networks: networkId,
+          with_networks: networkIds.join('|'),
           sort_by: 'popularity.desc',
           page,
         },
@@ -228,10 +230,11 @@ export class TmdbClient {
   }
 
   /**
-   * Returns all TV shows produced by a given TMDB company ID.
+   * Returns all TV shows produced by any of the given TMDB company IDs (OR logic).
    * Each show includes imdb_id and tvdb_id via external_ids.
    */
-  async discoverTvByCompany(companyId: number): Promise<TmdbTvShow[]> {
+  async discoverTvByCompany(companyIds: number[]): Promise<TmdbTvShow[]> {
+    if (companyIds.length === 0) return []
     const shows: TmdbTvShow[] = []
     let page = 1
     let totalPages = 1
@@ -239,7 +242,7 @@ export class TmdbClient {
     while (page <= totalPages) {
       const res = await this.http.get('/discover/tv', {
         params: {
-          with_companies: companyId,
+          with_companies: companyIds.join('|'),
           sort_by: 'popularity.desc',
           page,
         },

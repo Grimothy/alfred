@@ -49,19 +49,21 @@ router.get('/', (_req, res) => {
 
 // POST /api/collections
 router.post('/', (req, res) => {
-  const { name, rules, use_tmdb, tmdb_company_id, tmdb_network_id, remove_from_emby } = req.body as {
+  const { name, rules, use_tmdb, tmdb_company_id, tmdb_network_id, tmdb_company_ids, tmdb_network_ids, remove_from_emby } = req.body as {
     name: string
     rules: { field: string; value: string }[]
     use_tmdb?: boolean
     tmdb_company_id?: number | null
     tmdb_network_id?: number | null
+    tmdb_company_ids?: Array<{ id: number; name: string }>
+    tmdb_network_ids?: Array<{ id: number; name: string }>
     remove_from_emby?: boolean
   }
 
   if (!name?.trim()) {
     return res.status(400).json({ error: 'Collection name is required' })
   }
-  const isTmdb = use_tmdb && (tmdb_company_id != null || tmdb_network_id != null)
+  const isTmdb = use_tmdb && (tmdb_company_id != null || tmdb_network_id != null || (tmdb_company_ids?.length ?? 0) > 0 || (tmdb_network_ids?.length ?? 0) > 0)
   if (!isTmdb && (!Array.isArray(rules) || rules.length === 0)) {
     return res.status(400).json({ error: 'At least one rule is required' })
   }
@@ -73,6 +75,8 @@ router.post('/', (req, res) => {
       use_tmdb ? 1 : 0,
       tmdb_company_id ?? null,
       tmdb_network_id ?? null,
+      tmdb_company_ids ? JSON.stringify(tmdb_company_ids) : null,
+      tmdb_network_ids ? JSON.stringify(tmdb_network_ids) : null,
       remove_from_emby !== false ? 1 : 0
     )
     return res.status(201).json(collection)
@@ -88,13 +92,15 @@ router.post('/', (req, res) => {
 // PUT /api/collections/:id
 router.put('/:id', (req, res) => {
   const id = parseInt(req.params.id, 10)
-  const { name, rules, enabled, use_tmdb, tmdb_company_id, tmdb_network_id, remove_from_emby } = req.body as {
+  const { name, rules, enabled, use_tmdb, tmdb_company_id, tmdb_network_id, tmdb_company_ids, tmdb_network_ids, remove_from_emby } = req.body as {
     name: string
     rules: { field: string; value: string }[]
     enabled?: boolean
     use_tmdb?: boolean
     tmdb_company_id?: number | null
     tmdb_network_id?: number | null
+    tmdb_company_ids?: Array<{ id: number; name: string }>
+    tmdb_network_ids?: Array<{ id: number; name: string }>
     remove_from_emby?: boolean
   }
 
@@ -113,6 +119,8 @@ router.put('/:id', (req, res) => {
     useTmdbNum,
     tmdb_company_id,
     tmdb_network_id,
+    tmdb_company_ids ? JSON.stringify(tmdb_company_ids) : undefined,
+    tmdb_network_ids ? JSON.stringify(tmdb_network_ids) : undefined,
     removeFromEmbyNum
   )
   if (!updated) return res.status(404).json({ error: 'Collection not found' })

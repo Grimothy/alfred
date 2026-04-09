@@ -47,6 +47,8 @@ export interface CollectionRow {
   use_tmdb: number
   tmdb_company_id: number | null
   tmdb_network_id: number | null
+  tmdb_company_ids: string | null
+  tmdb_network_ids: string | null
   remove_from_emby: number
   created_at: string
 }
@@ -102,12 +104,14 @@ export function createCollection(
   useTmdb = 0,
   tmdbCompanyId: number | null = null,
   tmdbNetworkId: number | null = null,
+  tmdbCompanyIds: string | null = null,
+  tmdbNetworkIds: string | null = null,
   removeFromEmby = 1
 ): CollectionWithRules {
   const tx = db.transaction(() => {
     const result = db
-      .prepare('INSERT INTO collections (name, use_tmdb, tmdb_company_id, tmdb_network_id, remove_from_emby) VALUES (?, ?, ?, ?, ?)')
-      .run(name, useTmdb, tmdbCompanyId, tmdbNetworkId, removeFromEmby)
+      .prepare('INSERT INTO collections (name, use_tmdb, tmdb_company_id, tmdb_network_id, tmdb_company_ids, tmdb_network_ids, remove_from_emby) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(name, useTmdb, tmdbCompanyId, tmdbNetworkId, tmdbCompanyIds, tmdbNetworkIds, removeFromEmby)
     const id = result.lastInsertRowid as number
     const stmt = db.prepare(
       'INSERT INTO collection_rules (collection_id, field, value, content_type, match_type, tags) VALUES (?, ?, ?, ?, ?, ?)'
@@ -136,6 +140,8 @@ export function updateCollection(
   useTmdb?: number,
   tmdbCompanyId?: number | null,
   tmdbNetworkId?: number | null,
+  tmdbCompanyIds?: string | null,
+  tmdbNetworkIds?: string | null,
   removeFromEmby?: number
 ): CollectionWithRules | undefined {
   const tx = db.transaction(() => {
@@ -157,6 +163,14 @@ export function updateCollection(
     if (tmdbNetworkId !== undefined) {
       setParts.push('tmdb_network_id = ?')
       values.push(tmdbNetworkId)
+    }
+    if (tmdbCompanyIds !== undefined) {
+      setParts.push('tmdb_company_ids = ?')
+      values.push(tmdbCompanyIds)
+    }
+    if (tmdbNetworkIds !== undefined) {
+      setParts.push('tmdb_network_ids = ?')
+      values.push(tmdbNetworkIds)
     }
     if (removeFromEmby !== undefined) {
       setParts.push('remove_from_emby = ?')

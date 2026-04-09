@@ -32,6 +32,8 @@ export function initDb(): void {
       use_tmdb INTEGER DEFAULT 0,
       tmdb_company_id INTEGER,
       tmdb_network_id INTEGER,
+      tmdb_company_ids TEXT,
+      tmdb_network_ids TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -72,6 +74,8 @@ export function initDb(): void {
     'ALTER TABLE collection_rules ADD COLUMN match_type TEXT DEFAULT "any"',
     'ALTER TABLE collection_rules ADD COLUMN tags TEXT DEFAULT ""',
     'ALTER TABLE collections ADD COLUMN remove_from_emby INTEGER DEFAULT 1',
+    'ALTER TABLE collections ADD COLUMN tmdb_company_ids TEXT',
+    'ALTER TABLE collections ADD COLUMN tmdb_network_ids TEXT',
   ]
   for (const sql of migrations) {
     try { db.exec(sql) } catch { /* column already exists */ }

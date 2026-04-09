@@ -13,6 +13,7 @@ import {
   Rule,
   TmdbCompanyResult,
   TmdbNetworkResult,
+  TmdbIdEntry,
 } from '../api'
 import Button from './Button'
 import Badge from './Badge'
@@ -43,14 +44,12 @@ export default function CollectionEditor({
   const qc = useQueryClient()
   const [name, setName] = useState('')
   const [useTmdb, setUseTmdb] = useState(false)
-  const [tmdbCompanyId, setTmdbCompanyId] = useState<number | null>(null)
-  const [tmdbCompanyName, setTmdbCompanyName] = useState('')
+  const [tmdbCompanies, setTmdbCompanies] = useState<TmdbIdEntry[]>([])
   const [tmdbSearch, setTmdbSearch] = useState('')
   const [tmdbResults, setTmdbResults] = useState<TmdbCompanyResult[]>([])
   const [tmdbSearching, setTmdbSearching] = useState(false)
   const tmdbSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [tmdbNetworkId, setTmdbNetworkId] = useState<number | null>(null)
-  const [tmdbNetworkName, setTmdbNetworkName] = useState('')
+  const [tmdbNetworks, setTmdbNetworks] = useState<TmdbIdEntry[]>([])
   const [tmdbNetworkSearch, setTmdbNetworkSearch] = useState('')
   const [tmdbNetworkResults, setTmdbNetworkResults] = useState<TmdbNetworkResult[]>([])
   const [tmdbNetworkSearching, setTmdbNetworkSearching] = useState(false)
@@ -92,12 +91,14 @@ export default function CollectionEditor({
     if (collection) {
       setName(collection.name)
       setUseTmdb(collection.use_tmdb === 1)
-      setTmdbCompanyId(collection.tmdb_company_id)
-      setTmdbCompanyName('')
+      try {
+        setTmdbCompanies(collection.tmdb_company_ids ? JSON.parse(collection.tmdb_company_ids) : [])
+      } catch { setTmdbCompanies([]) }
       setTmdbSearch('')
       setTmdbResults([])
-      setTmdbNetworkId(collection.tmdb_network_id)
-      setTmdbNetworkName('')
+      try {
+        setTmdbNetworks(collection.tmdb_network_ids ? JSON.parse(collection.tmdb_network_ids) : [])
+      } catch { setTmdbNetworks([]) }
       setTmdbNetworkSearch('')
       setTmdbNetworkResults([])
       setSelectedStudios(
@@ -121,12 +122,10 @@ export default function CollectionEditor({
     } else {
       setName('')
       setUseTmdb(false)
-      setTmdbCompanyId(null)
-      setTmdbCompanyName('')
+      setTmdbCompanies([])
       setTmdbSearch('')
       setTmdbResults([])
-      setTmdbNetworkId(null)
-      setTmdbNetworkName('')
+      setTmdbNetworks([])
       setTmdbNetworkSearch('')
       setTmdbNetworkResults([])
       setSelectedStudios([])
@@ -153,8 +152,6 @@ export default function CollectionEditor({
 
   const handleTmdbSearchChange = useCallback((q: string) => {
     setTmdbSearch(q)
-    setTmdbCompanyId(null)
-    setTmdbCompanyName('')
     if (tmdbSearchRef.current) clearTimeout(tmdbSearchRef.current)
     if (!q.trim()) { setTmdbResults([]); return }
     tmdbSearchRef.current = setTimeout(async () => {
@@ -172,8 +169,6 @@ export default function CollectionEditor({
 
   const handleTmdbNetworkSearchChange = useCallback((q: string) => {
     setTmdbNetworkSearch(q)
-    setTmdbNetworkId(null)
-    setTmdbNetworkName('')
     if (tmdbNetworkSearchRef.current) clearTimeout(tmdbNetworkSearchRef.current)
     if (!q.trim()) { setTmdbNetworkResults([]); return }
     tmdbNetworkSearchRef.current = setTimeout(async () => {
@@ -299,7 +294,7 @@ export default function CollectionEditor({
     setError(null)
     if (!name.trim()) { setError('Collection name is required'); return }
     if (useTmdb) {
-      if (!tmdbCompanyId && !tmdbNetworkId) {
+      if (tmdbCompanies.length === 0 && tmdbNetworks.length === 0) {
         setError('Select at least one TMDB production company or network')
         return
       }
@@ -317,8 +312,8 @@ export default function CollectionEditor({
           name,
           rules,
           use_tmdb: useTmdb ? 1 : 0,
-          tmdb_company_id: useTmdb ? tmdbCompanyId : null,
-          tmdb_network_id: useTmdb ? tmdbNetworkId : null,
+          tmdb_company_ids: useTmdb ? tmdbCompanies : undefined,
+          tmdb_network_ids: useTmdb ? tmdbNetworks : undefined,
         },
       })
     } else {
@@ -326,8 +321,8 @@ export default function CollectionEditor({
         name,
         rules,
         use_tmdb: useTmdb ? 1 : 0,
-        tmdb_company_id: useTmdb ? tmdbCompanyId : null,
-        tmdb_network_id: useTmdb ? tmdbNetworkId : null,
+        tmdb_company_ids: useTmdb ? tmdbCompanies : undefined,
+        tmdb_network_ids: useTmdb ? tmdbNetworks : undefined,
         remove_from_emby: removeFromEmby ? 1 : 0,
       })
     }
@@ -392,12 +387,10 @@ export default function CollectionEditor({
                   checked={useTmdb}
                   onChange={(e) => {
                     setUseTmdb(e.target.checked)
-                    setTmdbCompanyId(null)
-                    setTmdbCompanyName('')
+                    setTmdbCompanies([])
                     setTmdbSearch('')
                     setTmdbResults([])
-                    setTmdbNetworkId(null)
-                    setTmdbNetworkName('')
+                    setTmdbNetworks([])
                     setTmdbNetworkSearch('')
                     setTmdbNetworkResults([])
                   }}
@@ -414,125 +407,127 @@ export default function CollectionEditor({
             <>
               {/* Production Company picker */}
               <div className={styles.field}>
-                <label className={styles.label}>Production Company (Movies)</label>
+                <label className={styles.label}>Production Companies (Movies)</label>
                 <div className={styles.fieldHint}>
-                  Matches movies produced by this company. Leave blank to skip movie matching.
+                  Matches movies produced by any selected company. Leave blank to skip movie matching.
                 </div>
-                {tmdbCompanyId && tmdbCompanyName && (
+                {tmdbCompanies.length > 0 && (
                   <div className={styles.selected}>
-                    <Badge
-                      label={tmdbCompanyName}
-                      variant="gold"
-                      onRemove={() => {
-                        setTmdbCompanyId(null)
-                        setTmdbCompanyName('')
-                        setTmdbSearch('')
-                        setTmdbResults([])
-                      }}
-                    />
+                    {tmdbCompanies.map((c) => (
+                      <Badge
+                        key={c.id}
+                        label={c.name}
+                        variant="gold"
+                        onRemove={() => setTmdbCompanies((prev) => prev.filter((x) => x.id !== c.id))}
+                      />
+                    ))}
                   </div>
                 )}
-                {!tmdbCompanyId && (
-                  <>
-                    <input
-                      className={styles.input}
-                      value={tmdbSearch}
-                      onChange={(e) => handleTmdbSearchChange(e.target.value)}
-                      placeholder="Search TMDB companies… (e.g. A24, Miramax)"
-                    />
-                    {tmdbSearching && (
-                      <div className={styles.noResults}>Searching…</div>
-                    )}
-                    {!tmdbSearching && tmdbResults.length > 0 && (
-                      <div className={styles.studioList}>
-                        {tmdbResults.slice(0, 20).map((r) => (
-                          <button
-                            key={r.id}
-                            className={styles.studioOption}
-                            onClick={() => {
-                              setTmdbCompanyId(r.id)
-                              setTmdbCompanyName(r.name)
-                              setTmdbSearch('')
-                              setTmdbResults([])
-                            }}
-                          >
-                            <span className={styles.studioName}>{r.name}</span>
-                            <span className={styles.studioCount}>
-                              {r.origin_country ? `(${r.origin_country})` : ''}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {!tmdbSearching && tmdbSearch && tmdbResults.length === 0 && (
-                      <div className={styles.noResults}>No companies match "{tmdbSearch}"</div>
-                    )}
-                  </>
+                <input
+                  className={styles.input}
+                  value={tmdbSearch}
+                  onChange={(e) => handleTmdbSearchChange(e.target.value)}
+                  placeholder="Search TMDB companies… (e.g. A24, Miramax)"
+                />
+                {tmdbSearching && (
+                  <div className={styles.noResults}>Searching…</div>
+                )}
+                {!tmdbSearching && tmdbResults.length > 0 && (
+                  <div className={styles.studioList}>
+                    {tmdbResults.slice(0, 20).map((r) => (
+                      <button
+                        key={r.id}
+                        className={[
+                          styles.studioOption,
+                          tmdbCompanies.some((c) => c.id === r.id) ? styles.studioOptionSelected : '',
+                        ].filter(Boolean).join(' ')}
+                        onClick={() => {
+                          if (!tmdbCompanies.some((c) => c.id === r.id)) {
+                            setTmdbCompanies((prev) => [...prev, { id: r.id, name: r.name }])
+                          }
+                          setTmdbSearch('')
+                          setTmdbResults([])
+                        }}
+                      >
+                        <span className={styles.studioCheckbox}>
+                          {tmdbCompanies.some((c) => c.id === r.id) ? '✓' : ''}
+                        </span>
+                        <span className={styles.studioName}>{r.name}</span>
+                        <span className={styles.studioCount}>
+                          {r.origin_country ? `(${r.origin_country})` : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!tmdbSearching && tmdbSearch && tmdbResults.length === 0 && (
+                  <div className={styles.noResults}>No companies match "{tmdbSearch}"</div>
                 )}
                 <div className={styles.fieldHint}>
-                  TMDB company ID: {tmdbCompanyId ?? '—'}
+                  TMDB company IDs: {tmdbCompanies.map((c) => c.id).join(', ') || '—'}
                 </div>
               </div>
 
               {/* Network picker */}
               <div className={styles.field}>
-                <label className={styles.label}>Network (TV Shows)</label>
+                <label className={styles.label}>Networks (TV Shows)</label>
                 <div className={styles.fieldHint}>
-                  Matches TV shows associated with this network. Leave blank to skip TV matching.
+                  Matches TV shows from any selected network. Leave blank to skip TV matching.
                 </div>
-                {tmdbNetworkId && tmdbNetworkName && (
+                {tmdbNetworks.length > 0 && (
                   <div className={styles.selected}>
-                    <Badge
-                      label={tmdbNetworkName}
-                      variant="gold"
-                      onRemove={() => {
-                        setTmdbNetworkId(null)
-                        setTmdbNetworkName('')
-                        setTmdbNetworkSearch('')
-                        setTmdbNetworkResults([])
-                      }}
-                    />
+                    {tmdbNetworks.map((n) => (
+                      <Badge
+                        key={n.id}
+                        label={n.name}
+                        variant="gold"
+                        onRemove={() => setTmdbNetworks((prev) => prev.filter((x) => x.id !== n.id))}
+                      />
+                    ))}
                   </div>
                 )}
-                {!tmdbNetworkId && (
-                  <>
-                    <input
-                      className={styles.input}
-                      value={tmdbNetworkSearch}
-                      onChange={(e) => handleTmdbNetworkSearchChange(e.target.value)}
-                      placeholder="Search TMDB networks… (e.g. Netflix, HBO)"
-                    />
-                    {tmdbNetworkSearching && (
-                      <div className={styles.noResults}>Searching…</div>
-                    )}
-                    {!tmdbNetworkSearching && tmdbNetworkResults.length > 0 && (
-                      <div className={styles.studioList}>
-                        {tmdbNetworkResults.slice(0, 20).map((r) => (
-                          <button
-                            key={r.id}
-                            className={styles.studioOption}
-                            onClick={() => {
-                              setTmdbNetworkId(r.id)
-                              setTmdbNetworkName(r.name)
-                              setTmdbNetworkSearch('')
-                              setTmdbNetworkResults([])
-                            }}
-                          >
-                            <span className={styles.studioName}>{r.name}</span>
-                            <span className={styles.studioCount}>
-                              {r.origin_country ? `(${r.origin_country})` : ''}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {!tmdbNetworkSearching && tmdbNetworkSearch && tmdbNetworkResults.length === 0 && (
-                      <div className={styles.noResults}>No networks match "{tmdbNetworkSearch}"</div>
-                    )}
-                  </>
+                <input
+                  className={styles.input}
+                  value={tmdbNetworkSearch}
+                  onChange={(e) => handleTmdbNetworkSearchChange(e.target.value)}
+                  placeholder="Search TMDB networks… (e.g. Netflix, HBO)"
+                />
+                {tmdbNetworkSearching && (
+                  <div className={styles.noResults}>Searching…</div>
+                )}
+                {!tmdbNetworkSearching && tmdbNetworkResults.length > 0 && (
+                  <div className={styles.studioList}>
+                    {tmdbNetworkResults.slice(0, 20).map((r) => (
+                      <button
+                        key={r.id}
+                        className={[
+                          styles.studioOption,
+                          tmdbNetworks.some((n) => n.id === r.id) ? styles.studioOptionSelected : '',
+                        ].filter(Boolean).join(' ')}
+                        onClick={() => {
+                          if (!tmdbNetworks.some((n) => n.id === r.id)) {
+                            setTmdbNetworks((prev) => [...prev, { id: r.id, name: r.name }])
+                          }
+                          setTmdbNetworkSearch('')
+                          setTmdbNetworkResults([])
+                        }}
+                      >
+                        <span className={styles.studioCheckbox}>
+                          {tmdbNetworks.some((n) => n.id === r.id) ? '✓' : ''}
+                        </span>
+                        <span className={styles.studioName}>{r.name}</span>
+                        <span className={styles.studioCount}>
+                          {r.origin_country ? `(${r.origin_country})` : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!tmdbNetworkSearching && tmdbNetworkSearch && tmdbNetworkResults.length === 0 && (
+                  <div className={styles.noResults}>No networks match "{tmdbNetworkSearch}"</div>
                 )}
                 <div className={styles.fieldHint}>
-                  TMDB network ID: {tmdbNetworkId ?? '—'}
+                  TMDB network IDs: {tmdbNetworks.map((n) => n.id).join(', ') || '—'}
                 </div>
               </div>
             </>
