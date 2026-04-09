@@ -1,6 +1,6 @@
 services:
   alfred:
-    image: ghcr.io/grimothy/alfred:master
+    image: ghcr.io/grimothy/alfred:1.0.0
     container_name: alfred
     ports:
       - "8099:8099"
