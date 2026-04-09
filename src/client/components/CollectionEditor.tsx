@@ -434,30 +434,31 @@ export default function CollectionEditor({
                 )}
                 {!tmdbSearching && tmdbResults.length > 0 && (
                   <div className={styles.studioList}>
-                    {tmdbResults.slice(0, 20).map((r) => (
-                      <button
-                        key={r.id}
-                        className={[
-                          styles.studioOption,
-                          tmdbCompanies.some((c) => c.id === r.id) ? styles.studioOptionSelected : '',
-                        ].filter(Boolean).join(' ')}
-                        onClick={() => {
-                          if (!tmdbCompanies.some((c) => c.id === r.id)) {
-                            setTmdbCompanies((prev) => [...prev, { id: r.id, name: r.name }])
-                          }
-                          setTmdbSearch('')
-                          setTmdbResults([])
-                        }}
-                      >
-                        <span className={styles.studioCheckbox}>
-                          {tmdbCompanies.some((c) => c.id === r.id) ? '✓' : ''}
-                        </span>
-                        <span className={styles.studioName}>{r.name}</span>
-                        <span className={styles.studioCount}>
-                          {r.origin_country ? `(${r.origin_country})` : ''}
-                        </span>
-                      </button>
-                    ))}
+                    {tmdbResults.slice(0, 20).map((r) => {
+                      const selected = tmdbCompanies.some((c) => c.id === r.id)
+                      return (
+                        <button
+                          key={r.id}
+                          className={[
+                            styles.studioOption,
+                            selected ? styles.studioOptionSelected : '',
+                          ].filter(Boolean).join(' ')}
+                          onClick={() => {
+                            if (selected) {
+                              setTmdbCompanies((prev) => prev.filter((x) => x.id !== r.id))
+                            } else {
+                              setTmdbCompanies((prev) => [...prev, { id: r.id, name: r.name }])
+                            }
+                          }}
+                        >
+                          <span className={styles.studioCheckbox}>{selected ? '✓' : ''}</span>
+                          <span className={styles.studioName}>{r.name}</span>
+                          <span className={styles.studioCount}>
+                            {r.origin_country ? `(${r.origin_country})` : ''}
+                          </span>
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
                 {!tmdbSearching && tmdbSearch && tmdbResults.length === 0 && (
@@ -497,30 +498,31 @@ export default function CollectionEditor({
                 )}
                 {!tmdbNetworkSearching && tmdbNetworkResults.length > 0 && (
                   <div className={styles.studioList}>
-                    {tmdbNetworkResults.slice(0, 20).map((r) => (
-                      <button
-                        key={r.id}
-                        className={[
-                          styles.studioOption,
-                          tmdbNetworks.some((n) => n.id === r.id) ? styles.studioOptionSelected : '',
-                        ].filter(Boolean).join(' ')}
-                        onClick={() => {
-                          if (!tmdbNetworks.some((n) => n.id === r.id)) {
-                            setTmdbNetworks((prev) => [...prev, { id: r.id, name: r.name }])
-                          }
-                          setTmdbNetworkSearch('')
-                          setTmdbNetworkResults([])
-                        }}
-                      >
-                        <span className={styles.studioCheckbox}>
-                          {tmdbNetworks.some((n) => n.id === r.id) ? '✓' : ''}
-                        </span>
-                        <span className={styles.studioName}>{r.name}</span>
-                        <span className={styles.studioCount}>
-                          {r.origin_country ? `(${r.origin_country})` : ''}
-                        </span>
-                      </button>
-                    ))}
+                    {tmdbNetworkResults.slice(0, 20).map((r) => {
+                      const selected = tmdbNetworks.some((n) => n.id === r.id)
+                      return (
+                        <button
+                          key={r.id}
+                          className={[
+                            styles.studioOption,
+                            selected ? styles.studioOptionSelected : '',
+                          ].filter(Boolean).join(' ')}
+                          onClick={() => {
+                            if (selected) {
+                              setTmdbNetworks((prev) => prev.filter((x) => x.id !== r.id))
+                            } else {
+                              setTmdbNetworks((prev) => [...prev, { id: r.id, name: r.name }])
+                            }
+                          }}
+                        >
+                          <span className={styles.studioCheckbox}>{selected ? '✓' : ''}</span>
+                          <span className={styles.studioName}>{r.name}</span>
+                          <span className={styles.studioCount}>
+                            {r.origin_country ? `(${r.origin_country})` : ''}
+                          </span>
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
                 {!tmdbNetworkSearching && tmdbNetworkSearch && tmdbNetworkResults.length === 0 && (
