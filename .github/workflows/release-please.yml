@@ -1,4 +1,4 @@
-name: Release Please
+name: Ship It
 
 on:
   push:
@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  release-please:
+  ship-it:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
