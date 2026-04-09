@@ -3,6 +3,8 @@ name: Build Container
 on:
   push:
     branches: [master]
+    tags:
+      - 'alfred-v*'
   pull_request:
     branches: [master]
   release:
