@@ -92,6 +92,11 @@ export interface Settings {
   tmdb_api_key: string
 }
 
+// ── App ───────────────────────────────────────────────────────────────────────
+
+export const getVersion = () =>
+  api.get<{ version: string }>('/version').then((r) => r.data.version)
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 export const getSettings = () =>

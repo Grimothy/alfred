@@ -1,6 +1,6 @@
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { getSyncStatus } from './api'
+import { getSyncStatus, getVersion } from './api'
 import Dashboard from './pages/Dashboard'
 import Collections from './pages/Collections'
 import Library from './pages/Library'
@@ -14,6 +14,12 @@ export default function App() {
     queryKey: ['sync-status'],
     queryFn: getSyncStatus,
     refetchInterval: 5000,
+  })
+
+  const { data: version } = useQuery({
+    queryKey: ['version'],
+    queryFn: getVersion,
+    staleTime: Infinity,
   })
 
   return (
@@ -60,7 +66,7 @@ export default function App() {
         )}
 
         <div className={styles.sidebarFooter}>
-          <span className={styles.version}>v1.0.0</span>
+          <span className={styles.version}>{version ? `v${version}` : '…'}</span>
         </div>
       </nav>
 

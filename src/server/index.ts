@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import path from 'path'
+import { readFileSync } from 'fs'
 import { initDb } from './db/schema'
 import { startScheduler } from './sync/scheduler'
 import settingsRouter from './routes/settings'
@@ -26,6 +27,12 @@ app.use('/api/library', libraryRouter)
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
+const PKG = JSON.parse(readFileSync(path.join(__dirname, '../../package.json'), 'utf8')) as { version: string }
+
+app.get('/api/version', (_req, res) => {
+  res.json({ version: PKG.version })
 })
 
 // Emby connection test — accepts ?host= and ?apiKey= query params so the user
