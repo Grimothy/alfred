@@ -5,6 +5,7 @@ A self-hosted collection manager for [Emby](https://emby.media). Alfred automati
 ## Features
 
 - **Rule-based collections** — filter by studio (any, primary-only, or primary/secondary excluding streaming services), genre, tag, and content type
+- **TMDB-backed collections** — build collections from The Movie Database using company IDs or network IDs, matched to your Emby library via IMDb/TMDB provider IDs
 - **Scheduled sync** — cron-based sync with preset schedules or custom cron expressions
 - **Manual sync** — trigger a sync on demand from the UI
 - **Collection preview** — see exactly which items will be included before committing
