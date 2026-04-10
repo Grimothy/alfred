@@ -1,10 +1,10 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getCollections,
   deleteCollection,
   toggleCollection,
-  previewCollectionById,
   getSyncStatus,
   triggerSync,
   Collection,
@@ -15,11 +15,105 @@ import Toggle from '../components/Toggle'
 import CollectionEditor from '../components/CollectionEditor'
 import styles from './Collections.module.css'
 
+/**
+ * Convert an absolute server-side filesystem path like
+ *   /app/data/images/collection-3-poster.jpg
+ * to a browser-accessible URL:
+ *   /images/collection-3-poster.jpg
+ */
+function toImageUrl(fsPath: string | null | undefined): string | null {
+  if (!fsPath) return null
+  const filename = fsPath.split('/').pop()
+  if (!filename) return null
+  return `/images/${filename}`
+}
+
+// ── Collection grid card ───────────────────────────────────────────────────────
+
+function CollectionCard({
+  c,
+  onNavigate,
+  onEdit,
+  onDelete,
+  onToggle,
+  deleteLoading,
+}: {
+  c: Collection
+  onNavigate: () => void
+  onEdit: () => void
+  onDelete: () => void
+  onToggle: (enabled: boolean) => void
+  deleteLoading: boolean
+}) {
+  const initials = c.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('')
+
+  const posterUrl = toImageUrl(c.poster_path)
+
+  return (
+    <div className={styles.card}>
+      {/* Clicking the card image area navigates to the detail page */}
+      <div className={styles.cardImage} onClick={onNavigate} role="button" tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && onNavigate()}>
+
+        {posterUrl ? (
+          <img src={posterUrl} alt={c.name} className={styles.posterImg} />
+        ) : (
+          <div className={styles.monogram} aria-hidden="true">
+            <span className={styles.monogramText}>{initials}</span>
+          </div>
+        )}
+
+        {/* Enabled toggle — top-right, stops propagation so click doesn't navigate */}
+        <div className={styles.cardToggle} onClick={(e) => e.stopPropagation()}>
+          <Toggle checked={c.enabled === 1} onChange={onToggle} />
+        </div>
+
+        {/* Hover action bar — stops propagation so clicks don't navigate */}
+        <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
+          <button className={styles.actionBtn} onClick={onEdit} title="Edit collection">
+            Edit
+          </button>
+          <button
+            className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
+            onClick={onDelete}
+            disabled={deleteLoading}
+            title="Remove collection"
+          >
+            {deleteLoading ? '…' : 'Remove'}
+          </button>
+        </div>
+
+        {/* Bottom scrim: name + badges */}
+        <div className={styles.cardScrim}>
+          <span className={styles.cardName}>{c.name}</span>
+          {c.rules.length > 0 && (
+            <div className={styles.cardBadges}>
+              {c.rules.slice(0, 3).map((r) => (
+                <Badge key={r.id} label={r.value} variant="gold" />
+              ))}
+              {c.rules.length > 3 && (
+                <Badge label={`+${c.rules.length - 3}`} />
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
+
 export default function Collections() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [editorOpen, setEditorOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Collection | null>(null)
-  const [viewTarget, setViewTarget] = useState<Collection | null>(null)
 
   const { data: collections = [], isLoading } = useQuery({
     queryKey: ['collections'],
@@ -30,12 +124,6 @@ export default function Collections() {
     queryKey: ['sync-status'],
     queryFn: getSyncStatus,
     refetchInterval: 5000,
-  })
-
-  const { data: viewItems, isLoading: viewLoading } = useQuery({
-    queryKey: ['collection-view', viewTarget?.id],
-    queryFn: () => previewCollectionById(viewTarget!.id),
-    enabled: viewTarget !== null,
   })
 
   const toggleMutation = useMutation({
@@ -76,10 +164,6 @@ export default function Collections() {
     }
   }
 
-  function closeView() {
-    setViewTarget(null)
-  }
-
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
@@ -112,73 +196,20 @@ export default function Collections() {
           </Button>
         </div>
       ) : (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Studios / Networks</th>
-                <th>Enabled</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {collections.map((c) => (
-                <tr key={c.id}>
-                  <td className={styles.nameCell}>
-                    <span className={styles.collName}>{c.name}</span>
-                  </td>
-                  <td>
-                    <div className={styles.badges}>
-                      {c.rules.slice(0, 5).map((r) => (
-                        <Badge key={r.id} label={r.value} variant="gold" />
-                      ))}
-                      {c.rules.length > 5 && (
-                        <Badge label={`+${c.rules.length - 5} more`} />
-                      )}
-                    </div>
-                  </td>
-                  <td>
-                    <Toggle
-                      checked={c.enabled === 1}
-                      onChange={(enabled) =>
-                        toggleMutation.mutate({ id: c.id, enabled })
-                      }
-                    />
-                  </td>
-                  <td>
-                    <div className={styles.actions}>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setViewTarget(c)}
-                      >
-                        View
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEdit(c)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={() => confirmDelete(c)}
-                        loading={
-                          deleteMutation.isPending &&
-                          deleteMutation.variables === c.id
-                        }
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className={styles.grid}>
+          {collections.map((c) => (
+            <CollectionCard
+              key={c.id}
+              c={c}
+              onNavigate={() => navigate(`/collections/${c.id}`)}
+              onEdit={() => openEdit(c)}
+              onDelete={() => confirmDelete(c)}
+              onToggle={(enabled) => toggleMutation.mutate({ id: c.id, enabled })}
+              deleteLoading={
+                deleteMutation.isPending && deleteMutation.variables === c.id
+              }
+            />
+          ))}
         </div>
       )}
 
@@ -187,36 +218,6 @@ export default function Collections() {
         collection={editTarget}
         onClose={() => setEditorOpen(false)}
       />
-
-      {viewTarget && (
-        <div className={styles.viewOverlay} onClick={closeView}>
-          <div className={styles.viewPanel} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.viewHeader}>
-              <h2 className={styles.viewTitle}>{viewTarget.name}</h2>
-              <button className={styles.viewClose} onClick={closeView}>×</button>
-            </div>
-            <div className={styles.viewBody}>
-              {viewLoading ? (
-                <div className={styles.viewLoading}>Loading…</div>
-              ) : viewItems ? (
-                <>
-                  <p className={styles.viewCount}>
-                    {viewItems.count} items in this collection
-                  </p>
-                  <div className={styles.viewList}>
-                    {viewItems.items.map((item) => (
-                      <div key={item.Id} className={styles.viewItem}>
-                        <span className={styles.viewItemName}>{item.Name}</span>
-                        <span className={styles.viewItemType}>{item.Type}</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

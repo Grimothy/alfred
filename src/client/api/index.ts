@@ -34,6 +34,7 @@ export interface Collection {
   tmdb_company_ids: string | null
   tmdb_network_ids: string | null
   remove_from_emby: number
+  include_tmdb_matches: number
   created_at: string
   rules: Rule[]
 }
@@ -82,6 +83,7 @@ export interface EmbyItem {
   Genres: string[]
   Tags?: string[]
   ProductionYear?: number
+  ImageTags?: { Primary?: string; [key: string]: string | undefined }
 }
 
 export interface Settings {
@@ -203,9 +205,34 @@ export const uploadCollectionImage = (
 export const deleteCollectionImage = (id: number, type: 'poster' | 'backdrop') =>
   api.delete(`/collections/${id}/images/${type}`).then((r) => r.data)
 
-export const previewCollectionById = (id: number) =>
+export const previewCollectionById = (id: number, refresh?: boolean) => {
+  const params: Record<string, string> = {}
+  if (refresh) params.refresh = 'true'
+  return api
+    .get<{ count: number; items: EmbyItem[] } | ExpandedPreviewResponse>(`/collections/${id}/preview`, { params })
+    .then((r) => r.data)
+}
+
+export interface TmdbDiscoveryItem {
+  id: number
+  name: string
+  type: 'movie' | 'tv'
+  imdb_id: string | null
+  tvdb_id: number | null
+  poster_path: string | null
+  release_date?: string
+  first_air_date?: string
+}
+
+export interface ExpandedPreviewResponse {
+  count: number
+  inCollection: EmbyItem[]
+  notInCollection: TmdbDiscoveryItem[]
+}
+
+export const toggleTmdbMatches = (id: number, include: boolean) =>
   api
-    .get<{ count: number; items: EmbyItem[] }>(`/collections/${id}/preview`)
+    .patch(`/collections/${id}/toggle-tmdb-matches`, { include_tmdb_matches: include })
     .then((r) => r.data)
 
 export const previewCollectionRules = (

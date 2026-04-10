@@ -1,0 +1,344 @@
+/* ── Page shell ─────────────────────────────────────────────── */
+.page {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Full-bleed backdrop hero ────────────────────────────────── */
+.hero {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.heroBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+  filter: brightness(0.6);
+}
+
+.heroFallback {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    var(--bg-card) 0%,
+    #1e1e28 100%
+  );
+  background-image: radial-gradient(
+    ellipse at 30% 50%,
+    rgba(201, 168, 76, 0.06) 0%,
+    transparent 70%
+  );
+}
+
+/* Gradient scrim — heavier at bottom so content reads clearly */
+.heroOverlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(15, 15, 20, 1) 0%,
+    rgba(15, 15, 20, 0.6) 45%,
+    rgba(15, 15, 20, 0.15) 100%
+  );
+  pointer-events: none;
+}
+
+/* ── Back button ─────────────────────────────────────────────── */
+.backBtn {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  z-index: 10;
+  background: rgba(20, 20, 25, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.backBtn:hover {
+  color: var(--text-primary);
+  border-color: rgba(201, 168, 76, 0.4);
+  background: rgba(201, 168, 76, 0.1);
+}
+
+/* ── Hero content: poster + meta ─────────────────────────────── */
+.heroContent {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  gap: 28px;
+  padding: 0 36px 32px;
+}
+
+/* ── Poster in the hero ──────────────────────────────────────── */
+.heroPosterWrap {
+  flex-shrink: 0;
+  width: 130px;
+  height: 195px; /* 2:3 */
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 2px solid rgba(201, 168, 76, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  /* Lifts the poster so it overlaps the bottom edge */
+  margin-bottom: -16px;
+}
+
+.heroPoster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.heroPosterFallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  background-image: radial-gradient(
+    ellipse at center,
+    rgba(201, 168, 76, 0.1) 0%,
+    transparent 70%
+  );
+}
+
+.heroPosterInitials {
+  font-family: var(--font-display);
+  font-size: 42px;
+  font-weight: 700;
+  color: var(--accent-gold);
+  opacity: 0.55;
+  user-select: none;
+}
+
+/* ── Hero meta: title, badges, count, actions ────────────────── */
+.heroMeta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 4px;
+}
+
+.heroTitle {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.15;
+}
+
+.heroBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.heroCount {
+  font-size: 12px;
+  color: var(--accent-gold);
+  letter-spacing: 0.05em;
+}
+
+.heroActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.heroToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heroToggleLabel {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* ── Body: items grid ────────────────────────────────────────── */
+.body {
+  flex: 1;
+  padding: 40px 36px 48px;
+  /* Account for the poster that overlaps */
+  padding-top: 48px;
+}
+
+/* ── State messages (loading / empty / not found) ────────────── */
+.stateMsg {
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 48px 0;
+}
+
+.stateMsgActions {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+/* ── Item grid ───────────────────────────────────────────────── */
+.itemGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 16px;
+}
+
+/* ── Section label ───────────────────────────────────────────── */
+.sectionLabel {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionLabel::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+/* ── Not-in-collection section ─────────────────────────────── */
+.notInCollectionSection {
+  margin-top: 48px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.notInCollectionSection .sectionLabel {
+  color: var(--accent-purple);
+}
+
+/* ── Item card ───────────────────────────────────────────────── */
+.itemCard {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  cursor: default;
+}
+
+.itemCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  border-color: var(--border-accent);
+}
+
+.itemCardGlow {
+  box-shadow: 0 0 0 1px var(--accent-purple-dim),
+              0 0 22px var(--accent-purple-glow),
+              0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.itemCardGlow:hover {
+  box-shadow: 0 0 0 1px var(--accent-purple),
+              0 0 32px var(--accent-purple-glow),
+              0 8px 28px rgba(0, 0, 0, 0.5);
+  border-color: var(--accent-purple);
+}
+
+.itemPosterImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.itemMonogram {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--accent-gold);
+  opacity: 0.25;
+  user-select: none;
+}
+
+.itemScrim {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  padding: 28px 8px 8px;
+  background: linear-gradient(
+    to top,
+    rgba(10, 10, 14, 0.92) 0%,
+    rgba(10, 10, 14, 0.6) 55%,
+    transparent 100%
+  );
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.itemName {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.itemType {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  text-align: center;
+}
+
+.itemYear {
+  font-size: 9px;
+  color: var(--accent-gold);
+  opacity: 0.75;
+  text-align: center;
+}

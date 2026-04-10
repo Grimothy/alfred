@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getSyncStatus, getVersion } from './api'
 import Dashboard from './pages/Dashboard'
 import Collections from './pages/Collections'
+import CollectionDetail from './pages/CollectionDetail'
 import Library from './pages/Library'
 import History from './pages/History'
 import Settings from './pages/Settings'
@@ -74,6 +75,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/collections" element={<Collections />} />
+          <Route path="/collections/:id" element={<CollectionDetail />} />
           <Route path="/library" element={<Library />} />
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />

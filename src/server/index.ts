@@ -10,6 +10,8 @@ import syncRouter from './routes/sync'
 import libraryRouter from './routes/library'
 import { getEmbyClient } from './emby/client'
 import { getAllSettings } from './db/queries'
+import { IMAGES_DIR } from './sync/engine'
+import axios from 'axios'
 
 const app = express()
 const PORT = parseInt(process.env.PORT ?? '8099', 10)
@@ -17,6 +19,10 @@ const PORT = parseInt(process.env.PORT ?? '8099', 10)
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors())
 app.use(express.json())
+
+// ── Static: uploaded collection images ───────────────────────────────────────
+// Serves /app/data/images/* as GET /images/*
+app.use('/images', express.static(IMAGES_DIR))
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use('/api/settings', settingsRouter)
@@ -35,8 +41,52 @@ app.get('/api/version', (_req, res) => {
   res.json({ version: PKG.version })
 })
 
-// Emby connection test — accepts ?host= and ?apiKey= query params so the user
-// can test unsaved credentials directly from the Settings form.
+// ── Emby item image proxy ─────────────────────────────────────────────────────
+// GET /api/emby/image/:itemId?type=Primary&tag=<imageTag>
+// Proxies the Emby image so the API key never reaches the browser.
+app.get('/api/emby/image/:itemId', async (req, res) => {
+  const settings = getAllSettings()
+  const host = settings['emby_host']
+  const apiKey = settings['emby_api_key']
+  if (!host || !apiKey) {
+    return res.status(503).json({ error: 'Emby not configured' })
+  }
+
+  const { itemId } = req.params
+  const imageType = (req.query.type as string | undefined) ?? 'Primary'
+  const tag = req.query.tag as string | undefined
+  const maxWidth = (req.query.w as string | undefined) ?? '400'
+
+  const base = host.replace(/\/+$/, '')
+  const url = `${base}/emby/Items/${itemId}/Images/${imageType}`
+
+  try {
+    const upstream = await axios.get(url, {
+      params: {
+        api_key: apiKey,
+        ...(tag ? { tag } : {}),
+        maxWidth,
+      },
+      responseType: 'stream',
+      timeout: 10_000,
+    })
+
+    const ct = upstream.headers['content-type'] as string | undefined
+    if (ct) res.setHeader('Content-Type', ct)
+    // Cache images aggressively — they only change when the tag changes
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+    upstream.data.pipe(res)
+  } catch (err) {
+    // If Emby returns 404 or similar, mirror that status
+    if (axios.isAxiosError(err) && err.response) {
+      return res.status(err.response.status).end()
+    }
+    return res.status(502).end()
+  }
+})
+
+// ── Emby connection test ──────────────────────────────────────────────────────
+// Accepts ?host= and ?apiKey= query params so the user can test unsaved credentials.
 app.get('/api/emby/test', async (req, res) => {
   const settings = getAllSettings()
   const host = (req.query.host as string | undefined) || settings['emby_host']

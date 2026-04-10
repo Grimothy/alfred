@@ -5,6 +5,27 @@ frontend, SQLite via better-sqlite3, containerised in a single Docker image.
 
 ---
 
+## Context Hygiene — MANDATORY
+
+**Read `.opencode/context/navigation.md` at the start of every session.**
+
+After making ANY of the following changes, `.opencode/context/navigation.md` MUST be
+updated to reflect the change before the session ends:
+
+- Adding, removing, or renaming any route (src/client/App.tsx)
+- Adding, removing, or renaming any page component (src/client/pages/)
+- Adding, removing, or renaming any shared component (src/client/components/)
+- Adding, removing, or renaming any API function or type (src/client/api/index.ts)
+- Adding, removing, or renaming any server endpoint (src/server/index.ts or routes/)
+- Any change to image URL patterns, authentication flows, or data-fetching conventions
+- Any structural change to the DB schema or query layer
+
+**This is not optional.** If in doubt whether something needs updating — update it.
+Stale documentation is worse than no documentation. The navigation.md file is the
+source of truth for the codebase's public interface.
+
+---
+
 ## Project Layout
 
 ```
@@ -21,8 +42,8 @@ src/client/          React 18 + Vite SPA
   api/index.ts       All axios calls, typed return values — no fetch() elsewhere
   App.tsx            BrowserRouter layout + sidebar nav
   components/        Shared UI: Button, Card, Badge, Toggle, CollectionEditor
-  pages/             One file per route: Dashboard, Collections, Library,
-                     History, Settings, Setup
+  pages/             One file per route: Dashboard, Collections, CollectionDetail,
+                      Library, History, Settings, Setup
   index.css          CSS custom properties (design tokens) — source of truth for theme
   vite-env.d.ts      *.module.css type declaration
 

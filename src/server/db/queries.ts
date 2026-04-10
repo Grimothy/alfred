@@ -50,6 +50,7 @@ export interface CollectionRow {
   tmdb_company_ids: string | null
   tmdb_network_ids: string | null
   remove_from_emby: number
+  include_tmdb_matches: number
   created_at: string
 }
 
@@ -142,7 +143,8 @@ export function updateCollection(
   tmdbNetworkId?: number | null,
   tmdbCompanyIds?: string | null,
   tmdbNetworkIds?: string | null,
-  removeFromEmby?: number
+  removeFromEmby?: number,
+  includeTmdbMatches?: number
 ): CollectionWithRules | undefined {
   const tx = db.transaction(() => {
     const setParts = ['name = ?']
@@ -176,6 +178,10 @@ export function updateCollection(
       setParts.push('remove_from_emby = ?')
       values.push(removeFromEmby)
     }
+    if (includeTmdbMatches !== undefined) {
+      setParts.push('include_tmdb_matches = ?')
+      values.push(includeTmdbMatches)
+    }
 
     values.push(id)
     db.prepare(`UPDATE collections SET ${setParts.join(', ')} WHERE id = ?`).run(...values)
@@ -207,6 +213,41 @@ export function toggleCollection(id: number, enabled: boolean): void {
 
 export function deleteCollection(id: number): void {
   db.prepare('DELETE FROM collections WHERE id = ?').run(id)
+}
+
+export function toggleTmdbMatches(id: number, include: boolean): void {
+  db.prepare('UPDATE collections SET include_tmdb_matches = ? WHERE id = ?').run(
+    include ? 1 : 0,
+    id
+  )
+}
+
+// ── TMDB Discovery Cache ────────────────────────────────────────────────────────
+
+interface TmdbDiscoveryCacheRow {
+  collection_id: number
+  items_json: string
+  discovered_at: number
+}
+
+export function getDiscoveryCache(collectionId: number): TmdbDiscoveryCacheRow | undefined {
+  return db
+    .prepare('SELECT * FROM tmdb_discovery_cache WHERE collection_id = ?')
+    .get(collectionId) as TmdbDiscoveryCacheRow | undefined
+}
+
+export function setDiscoveryCache(collectionId: number, itemsJson: string): void {
+  db.prepare(`
+    INSERT INTO tmdb_discovery_cache (collection_id, items_json, discovered_at)
+    VALUES (?, ?, unixepoch())
+    ON CONFLICT(collection_id) DO UPDATE SET
+      items_json    = excluded.items_json,
+      discovered_at = excluded.discovered_at
+  `).run(collectionId, itemsJson)
+}
+
+export function invalidateDiscoveryCache(collectionId: number): void {
+  db.prepare('DELETE FROM tmdb_discovery_cache WHERE collection_id = ?').run(collectionId)
 }
 
 export function setCollectionImagePath(

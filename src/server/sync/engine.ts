@@ -7,8 +7,11 @@ import {
   startSyncRecord,
   completeSyncRecord,
   CollectionWithRules,
+  getDiscoveryCache,
+  setDiscoveryCache,
+  invalidateDiscoveryCache,
 } from '../db/queries'
-import { getTmdbClient } from '../tmdb/client'
+import { getTmdbClient, TmdbMovie, TmdbTvShow } from '../tmdb/client'
 
 // Where uploaded images are stored on disk
 export const IMAGES_DIR = process.env.IMAGES_DIR ||
@@ -30,7 +33,27 @@ export interface SyncSummary {
   durationMs: number
 }
 
+// Raw TMDB discovery item — stored in the cache
+export interface TmdbDiscoveryItem {
+  id: number
+  name: string        // title (movie) or name (TV show)
+  type: 'movie' | 'tv'
+  imdb_id: string | null
+  tvdb_id: number | null
+  poster_path: string | null
+  release_date?: string   // movies
+  first_air_date?: string // TV shows
+}
+
+export interface TmdbDiscoveryResult {
+  inCollection: EmbyItem[]
+  notInCollection: TmdbDiscoveryItem[]
+}
+
 let syncRunning = false
+
+// Cache TTL: 72 hours in seconds
+const DISCOVERY_CACHE_TTL = 72 * 60 * 60
 
 export function isSyncRunning(): boolean {
   return syncRunning
@@ -541,21 +564,25 @@ export async function previewCollection(
 }
 
 /**
- * Preview which Emby library items a TMDB-backed collection would contain,
- * without making any writes to Emby. Throws on TMDB or Emby fetch failure.
+ * Fetches TMDB discovery items (movies + TV shows) for a collection,
+ * using a 72-hour SQLite cache. Returns raw discovery data for internal use.
  */
-export async function previewTmdbCollection(
-  collection: CollectionWithRules
-): Promise<EmbyItem[]> {
-  const settings = getAllSettings()
-  const host = settings['emby_host']
-  const apiKey = settings['emby_api_key']
-  const tmdbApiKey = settings['tmdb_api_key']
+async function fetchCachedDiscovery(
+  collection: CollectionWithRules,
+  bypassCache: boolean,
+  tmdbApiKey: string
+): Promise<TmdbDiscoveryItem[]> {
+  const cached = !bypassCache ? getDiscoveryCache(collection.id) : undefined
+  const now = Math.floor(Date.now() / 1000)
 
-  if (!host || !apiKey) throw new Error('Emby not configured')
-  if (!tmdbApiKey) throw new Error('TMDB API key not configured')
+  if (cached && now - cached.discovered_at < DISCOVERY_CACHE_TTL) {
+    try {
+      return JSON.parse(cached.items_json) as TmdbDiscoveryItem[]
+    } catch {
+      // Corrupt cache — treat as miss
+    }
+  }
 
-  const client = getEmbyClient(host, apiKey)
   const tmdb = getTmdbClient(tmdbApiKey)
 
   const companyIds = parseTmdbIds(collection.tmdb_company_ids)
@@ -579,27 +606,78 @@ export async function previewTmdbCollection(
     ? tmdb.discoverTvByCompany(companyIds)
     : Promise.resolve([])
 
-  const [allItems, [movies, networkShows, companyShows]] = await Promise.all([
-    client.getItems(['Movie', 'Series']),
-    Promise.all([moviePromise, tvNetworkPromise, tvCompanyPromise]),
+  const [movies, networkShows, companyShows] = await Promise.all([
+    moviePromise, tvNetworkPromise, tvCompanyPromise,
   ])
 
   const shows = [...networkShows, ...companyShows]
 
-  const tmdbImdbIds = new Set<string>()
+  const items: TmdbDiscoveryItem[] = []
+
+  for (const m of movies) {
+    items.push({
+      id: m.id,
+      name: m.title,
+      type: 'movie',
+      imdb_id: m.imdb_id,
+      tvdb_id: null,
+      poster_path: m.poster_path ?? null,
+      release_date: m.release_date,
+    })
+  }
+
+  for (const s of shows) {
+    items.push({
+      id: s.id,
+      name: s.name,
+      type: 'tv',
+      imdb_id: s.external_ids?.imdb_id ?? null,
+      tvdb_id: s.external_ids?.tvdb_id ?? null,
+      poster_path: s.poster_path ?? null,
+      first_air_date: s.first_air_date,
+    })
+  }
+
+  // Store in cache (even if stale — graceful degradation on next read)
+  setDiscoveryCache(collection.id, JSON.stringify(items))
+
+  return items
+}
+
+/**
+ * Preview which Emby library items a TMDB-backed collection would contain,
+ * without making any writes to Emby. Uses 72-hour cache. Throws on TMDB or Emby fetch failure.
+ */
+export async function previewTmdbCollection(
+  collection: CollectionWithRules,
+  bypassCache = false
+): Promise<EmbyItem[]> {
+  const settings = getAllSettings()
+  const host = settings['emby_host']
+  const apiKey = settings['emby_api_key']
+  const tmdbApiKey = settings['tmdb_api_key']
+
+  if (!host || !apiKey) throw new Error('Emby not configured')
+  if (!tmdbApiKey) throw new Error('TMDB API key not configured')
+
+  const client = getEmbyClient(host, apiKey)
+  const [allItems, discoveryItems] = await Promise.all([
+    client.getItems(['Movie', 'Series']),
+    fetchCachedDiscovery(collection, bypassCache, tmdbApiKey),
+  ])
+
   const movie_imdbIds = new Set<string>()
   const movie_tvdbIds = new Set<string>()
   const tv_imdbIds = new Set<string>()
   const tv_tvdbIds = new Set<string>()
 
-  for (const m of movies) {
-    if (m.imdb_id) movie_imdbIds.add(m.imdb_id)
-  }
-  for (const s of shows) {
-    const imdbId = s.external_ids?.imdb_id
-    if (imdbId) tv_imdbIds.add(imdbId)
-    const tvdbId = s.external_ids?.tvdb_id
-    if (tvdbId != null) tv_tvdbIds.add(String(tvdbId))
+  for (const item of discoveryItems) {
+    if (item.type === 'movie') {
+      if (item.imdb_id) movie_imdbIds.add(item.imdb_id)
+    } else {
+      if (item.imdb_id) tv_imdbIds.add(item.imdb_id)
+      if (item.tvdb_id != null) tv_tvdbIds.add(String(item.tvdb_id))
+    }
   }
 
   return allItems.filter((item) => {
@@ -618,6 +696,94 @@ export async function previewTmdbCollection(
     }
     return false
   })
+}
+
+/**
+ * Preview a TMDB-backed collection for expanded view.
+ *
+ * - inCollection: Emby items currently in the Emby BoxSet (gold cards)
+ * - notInCollection: TMDB discovery items NOT in the BoxSet (purple glow) —
+ *                    acquisition candidates for Sonarr/Radarr
+ *
+ * Uses 72-hour cache. Throws on TMDB or Emby fetch failure.
+ */
+export async function previewTmdbCollectionExpanded(
+  collection: CollectionWithRules,
+  bypassCache = false
+): Promise<TmdbDiscoveryResult> {
+  const settings = getAllSettings()
+  const host = settings['emby_host']
+  const apiKey = settings['emby_api_key']
+  const tmdbApiKey = settings['tmdb_api_key']
+
+  if (!host || !apiKey) throw new Error('Emby not configured')
+  if (!tmdbApiKey) throw new Error('TMDB API key not configured')
+
+  const client = getEmbyClient(host, apiKey)
+  const embyCollections = await client.getCollections()
+  const embyCollectionId = embyCollections.find(
+    (c) => c.Name.toLowerCase() === collection.name.toLowerCase()
+  )?.Id
+
+  const [allItems, discoveryItems] = await Promise.all([
+    client.getItems(['Movie', 'Series']),
+    fetchCachedDiscovery(collection, bypassCache, tmdbApiKey),
+  ])
+
+  // Get the item IDs currently in the Emby BoxSet
+  const inBoxSetIds = embyCollectionId
+    ? new Set(await client.getCollectionItemIds(embyCollectionId))
+    : new Set<string>()
+
+  // Build lookup maps: IMDb/TVDB ID → Emby item (scoped by type)
+  const embyMovie_imdb = new Map<string, EmbyItem>()
+  const embyMovie_tvdb = new Map<string, EmbyItem>()
+  const embyTv_imdb = new Map<string, EmbyItem>()
+  const embyTv_tvdb = new Map<string, EmbyItem>()
+
+  for (const item of allItems) {
+    const imdb = item.ProviderIds?.Imdb ?? item.ProviderIds?.IMDB
+    const tvdb = item.ProviderIds?.Tvdb ?? item.ProviderIds?.TVDB
+    if (item.Type === 'Movie') {
+      if (imdb) embyMovie_imdb.set(imdb, item)
+      if (tvdb) embyMovie_tvdb.set(tvdb, item)
+    } else if (item.Type === 'Series') {
+      if (imdb) embyTv_imdb.set(imdb, item)
+      if (tvdb) embyTv_tvdb.set(tvdb, item)
+    }
+  }
+
+  const inCollection: EmbyItem[] = []
+  const notInCollection: TmdbDiscoveryItem[] = []
+
+  for (const disc of discoveryItems) {
+    let matchedEmbyItem: EmbyItem | undefined
+
+    if (disc.type === 'movie') {
+      matchedEmbyItem =
+        (disc.imdb_id ? embyMovie_imdb.get(disc.imdb_id) : undefined) ??
+        (disc.tvdb_id != null ? embyMovie_tvdb.get(String(disc.tvdb_id)) : undefined)
+    } else {
+      matchedEmbyItem =
+        (disc.imdb_id ? embyTv_imdb.get(disc.imdb_id) : undefined) ??
+        (disc.tvdb_id != null ? embyTv_tvdb.get(String(disc.tvdb_id)) : undefined)
+    }
+
+    if (matchedEmbyItem) {
+      // Item exists in Emby — check if it's in the BoxSet
+      if (inBoxSetIds.has(matchedEmbyItem.Id)) {
+        inCollection.push(matchedEmbyItem)
+      } else {
+        // In Emby but not in the BoxSet — acquisition candidate (purple glow)
+        notInCollection.push(disc)
+      }
+    } else {
+      // Not in Emby at all — acquisition candidate (purple glow)
+      notInCollection.push(disc)
+    }
+  }
+
+  return { inCollection, notInCollection }
 }
 
 export async function previewCollectionWithRules(

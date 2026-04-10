@@ -61,6 +61,12 @@ export function initDb(): void {
       tmdb_company_id INTEGER NOT NULL,
       last_refreshed INTEGER NOT NULL DEFAULT (unixepoch())
     );
+
+    CREATE TABLE IF NOT EXISTS tmdb_discovery_cache (
+      collection_id INTEGER PRIMARY KEY REFERENCES collections(id) ON DELETE CASCADE,
+      items_json    TEXT    NOT NULL,
+      discovered_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
   `)
 
   // Migrations — ALTER TABLE ignores columns that already exist
@@ -76,6 +82,7 @@ export function initDb(): void {
     'ALTER TABLE collections ADD COLUMN remove_from_emby INTEGER DEFAULT 1',
     'ALTER TABLE collections ADD COLUMN tmdb_company_ids TEXT',
     'ALTER TABLE collections ADD COLUMN tmdb_network_ids TEXT',
+    'ALTER TABLE collections ADD COLUMN include_tmdb_matches INTEGER DEFAULT 0',
   ]
   for (const sql of migrations) {
     try { db.exec(sql) } catch { /* column already exists */ }

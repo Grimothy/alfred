@@ -9,9 +9,16 @@ import {
   updateCollection,
   deleteCollection,
   toggleCollection,
+  toggleTmdbMatches,
   setCollectionImagePath,
+  invalidateDiscoveryCache,
 } from '../db/queries'
-import { previewCollectionWithRules, previewTmdbCollection, IMAGES_DIR } from '../sync/engine'
+import {
+  previewCollectionWithRules,
+  previewTmdbCollection,
+  previewTmdbCollectionExpanded,
+  IMAGES_DIR,
+} from '../sync/engine'
 import { searchCompanies, searchNetworks } from '../tmdb/cache'
 
 // Ensure images directory exists
@@ -108,6 +115,12 @@ router.put('/:id', (req, res) => {
     return res.status(400).json({ error: 'Collection name is required' })
   }
 
+  // Invalidate discovery cache if any TMDB IDs are being updated
+  if (use_tmdb || tmdb_company_id != null || tmdb_network_id != null ||
+      tmdb_company_ids !== undefined || tmdb_network_ids !== undefined) {
+    invalidateDiscoveryCache(id)
+  }
+
   const enabledNum = enabled !== undefined ? (enabled ? 1 : 0) : undefined
   const useTmdbNum = use_tmdb !== undefined ? (use_tmdb ? 1 : 0) : undefined
   const removeFromEmbyNum = remove_from_emby !== undefined ? (remove_from_emby ? 1 : 0) : undefined
@@ -138,6 +151,19 @@ router.patch('/:id/toggle', (req, res) => {
   return res.json({ ok: true })
 })
 
+// PATCH /api/collections/:id/toggle-tmdb-matches
+router.patch('/:id/toggle-tmdb-matches', (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const { include_tmdb_matches } = req.body as { include_tmdb_matches: boolean }
+  const col = getCollectionById(id)
+  if (!col) return res.status(404).json({ error: 'Collection not found' })
+  if (col.use_tmdb !== 1) {
+    return res.status(400).json({ error: 'Collection is not TMDB-backed' })
+  }
+  toggleTmdbMatches(id, include_tmdb_matches)
+  return res.json({ ok: true })
+})
+
 // DELETE /api/collections/:id
 router.delete('/:id', (req, res) => {
   const id = parseInt(req.params.id, 10)
@@ -150,12 +176,22 @@ router.delete('/:id', (req, res) => {
 // GET /api/collections/:id/preview
 router.get('/:id/preview', async (req, res) => {
   const id = parseInt(req.params.id, 10)
+  const bypassCache = req.query.refresh === 'true'
   const col = getCollectionById(id)
   if (!col) return res.status(404).json({ error: 'Collection not found' })
 
   try {
+    if (col.use_tmdb === 1 && col.include_tmdb_matches === 1) {
+      const result = await previewTmdbCollectionExpanded(col, bypassCache)
+      return res.json({
+        count: result.inCollection.length,
+        inCollection: result.inCollection,
+        notInCollection: result.notInCollection,
+      })
+    }
+
     const items = col.use_tmdb === 1
-      ? await previewTmdbCollection(col)
+      ? await previewTmdbCollection(col, bypassCache)
       : await previewCollectionWithRules(col.rules)
     return res.json({ count: items.length, items })
   } catch (err) {

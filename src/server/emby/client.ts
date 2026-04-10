@@ -11,6 +11,7 @@ export interface EmbyItem {
   ProductionYear?: number
   PremiereDate?: string
   ProviderIds?: { Imdb?: string; IMDB?: string; Tvdb?: string; TVDB?: string }
+  ImageTags?: { Primary?: string; [key: string]: string | undefined }
 }
 
 export interface EmbyCollection {
@@ -48,7 +49,7 @@ export class EmbyClient {
       const res = await this.http.get('/emby/Items', {
         params: {
           IncludeItemTypes: types.join(','),
-          Fields: 'Studios,Genres,Tags,ProductionYear,ProviderIds',
+          Fields: 'Studios,Genres,Tags,ProductionYear,ProviderIds,ImageTags',
           Recursive: true,
           StartIndex: startIndex,
           Limit: limit,
