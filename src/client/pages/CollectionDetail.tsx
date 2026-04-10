@@ -191,6 +191,9 @@ function ExpandedOrStandardView({
     const year = rawYear ? parseInt(rawYear.slice(0, 4)) : undefined
     if (filters.yearFrom && year && year < parseInt(filters.yearFrom)) return false
     if (filters.yearTo && year && year > parseInt(filters.yearTo)) return false
+    // TMDB items have no genre or rating data — exclude them when those filters are active
+    if (filters.genres.length > 0) return false
+    if (filters.ratings.length > 0) return false
     return true
   })
 
