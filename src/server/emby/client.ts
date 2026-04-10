@@ -10,6 +10,8 @@ export interface EmbyItem {
   Tags?: string[]
   ProductionYear?: number
   PremiereDate?: string
+  OfficialRating?: string
+  CommunityRating?: number
   ProviderIds?: { Imdb?: string; IMDB?: string; Tvdb?: string; TVDB?: string }
   ImageTags?: { Primary?: string; [key: string]: string | undefined }
   BackdropImageTags?: string[]
@@ -62,7 +64,7 @@ export class EmbyClient {
       const res = await this.http.get('/emby/Items', {
         params: {
           IncludeItemTypes: types.join(','),
-          Fields: 'Studios,Genres,Tags,ProductionYear,ProviderIds,ImageTags',
+          Fields: 'Studios,Genres,Tags,ProductionYear,OfficialRating,CommunityRating,ProviderIds,ImageTags',
           Recursive: true,
           StartIndex: startIndex,
           Limit: limit,

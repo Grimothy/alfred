@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -103,64 +103,336 @@ function TmdbMatchCard({ item, navigate }: { item: TmdbDiscoveryItem; navigate: 
   )
 }
 
+// ── Filter / sort types ───────────────────────────────────────────────────────
+
+type SortKey = 'name-asc' | 'name-desc' | 'year-desc' | 'year-asc' | 'rating-asc' | 'rating-desc'
+
+interface FilterState {
+  search: string
+  genres: string[]
+  ratings: string[]
+  type: 'all' | 'Movie' | 'Series'
+  yearFrom: string
+  yearTo: string
+  sort: SortKey
+}
+
+const DEFAULT_FILTERS: FilterState = {
+  search: '',
+  genres: [],
+  ratings: [],
+  type: 'all',
+  yearFrom: '',
+  yearTo: '',
+  sort: 'name-asc',
+}
+
+function isFiltered(f: FilterState): boolean {
+  return (
+    f.search !== '' ||
+    f.genres.length > 0 ||
+    f.ratings.length > 0 ||
+    f.type !== 'all' ||
+    f.yearFrom !== '' ||
+    f.yearTo !== ''
+  )
+}
+
 // ── Expanded or standard view ─────────────────────────────────────────────────
 
 type StandardPreview = { count: number; items: EmbyItem[] }
 type PreviewResult = StandardPreview | ExpandedPreviewResponse
 
-function ExpandedOrStandardView({ viewItems, navigate }: { viewItems: PreviewResult | null; navigate: ReturnType<typeof useNavigate> }) {
+function ExpandedOrStandardView({
+  viewItems,
+  filters,
+  navigate,
+}: {
+  viewItems: PreviewResult | null
+  filters: FilterState
+  navigate: ReturnType<typeof useNavigate>
+}) {
   if (!viewItems) {
     return <div className={styles.stateMsg}>No items in this collection yet.</div>
   }
 
+  // Gather all items for filtering
+  const allEmby: EmbyItem[] = 'inCollection' in viewItems
+    ? viewItems.inCollection
+    : viewItems.items
+
+  const allTmdb: TmdbDiscoveryItem[] = 'notInCollection' in viewItems
+    ? viewItems.notInCollection
+    : []
+
+  // Apply filters to Emby items
+  const filteredEmby = allEmby.filter((item) => {
+    if (filters.search && !item.Name.toLowerCase().includes(filters.search.toLowerCase())) return false
+    if (filters.type !== 'all' && item.Type !== filters.type) return false
+    if (filters.genres.length > 0 && !filters.genres.some((g) => item.Genres?.includes(g))) return false
+    if (filters.ratings.length > 0) {
+      const r = item.OfficialRating ?? ''
+      if (!filters.ratings.includes(r)) return false
+    }
+    const year = item.ProductionYear
+    if (filters.yearFrom && year && year < parseInt(filters.yearFrom)) return false
+    if (filters.yearTo && year && year > parseInt(filters.yearTo)) return false
+    return true
+  })
+
+  // Apply filters to TMDB items (search + year + type only — no rating/genre data)
+  const filteredTmdb = allTmdb.filter((item) => {
+    if (filters.search && !item.name.toLowerCase().includes(filters.search.toLowerCase())) return false
+    if (filters.type !== 'all') {
+      const tmdbType = item.type === 'movie' ? 'Movie' : 'Series'
+      if (tmdbType !== filters.type) return false
+    }
+    const rawYear = item.type === 'movie' ? item.release_date : item.first_air_date
+    const year = rawYear ? parseInt(rawYear.slice(0, 4)) : undefined
+    if (filters.yearFrom && year && year < parseInt(filters.yearFrom)) return false
+    if (filters.yearTo && year && year > parseInt(filters.yearTo)) return false
+    // If rating filter is active, TMDB items have no rating — hide them
+    if (filters.ratings.length > 0) return false
+    // If genre filter is active, TMDB items have no genre — hide them
+    if (filters.genres.length > 0) return false
+    return true
+  })
+
+  // Sort Emby items
+  const sortedEmby = [...filteredEmby].sort((a, b) => {
+    switch (filters.sort) {
+      case 'name-desc': return b.Name.localeCompare(a.Name)
+      case 'year-desc': return (b.ProductionYear ?? 0) - (a.ProductionYear ?? 0)
+      case 'year-asc': return (a.ProductionYear ?? 0) - (b.ProductionYear ?? 0)
+      case 'rating-asc': return (a.CommunityRating ?? 0) - (b.CommunityRating ?? 0)
+      case 'rating-desc': return (b.CommunityRating ?? 0) - (a.CommunityRating ?? 0)
+      default: return a.Name.localeCompare(b.Name)
+    }
+  })
+
+  const totalEmby = allEmby.length
+  const totalTmdb = allTmdb.length
+  const filtered = isFiltered(filters)
+
+  if (sortedEmby.length === 0 && filteredTmdb.length === 0) {
+    return <div className={styles.stateMsg}>No items match your filters.</div>
+  }
+
   if ('inCollection' in viewItems) {
-    const expanded = viewItems
     return (
       <>
-        {expanded.inCollection.length > 0 && (
+        {sortedEmby.length > 0 && (
           <>
             <p className={styles.sectionLabel}>
-              In collection ({expanded.inCollection.length})
+              In collection ({filtered ? `${sortedEmby.length} of ${totalEmby}` : sortedEmby.length})
             </p>
             <div className={styles.itemGrid}>
-              {expanded.inCollection.map((item: EmbyItem) => (
+              {sortedEmby.map((item: EmbyItem) => (
                 <ItemCard key={item.Id} item={item} navigate={navigate} />
               ))}
             </div>
           </>
         )}
 
-        {expanded.notInCollection.length > 0 && (
+        {filteredTmdb.length > 0 && (
           <div className={styles.notInCollectionSection}>
             <p className={styles.sectionLabel}>
-              Not in collection — TMDB matches ({expanded.notInCollection.length})
+              Not in collection — TMDB matches ({filtered ? `${filteredTmdb.length} of ${totalTmdb}` : filteredTmdb.length})
             </p>
             <div className={styles.itemGrid}>
-              {expanded.notInCollection.map((item) => (
+              {filteredTmdb.map((item) => (
                 <TmdbMatchCard key={`tmdb-${item.id}`} item={item} navigate={navigate} />
               ))}
             </div>
           </div>
         )}
 
-        {expanded.inCollection.length === 0 && expanded.notInCollection.length === 0 && (
+        {sortedEmby.length === 0 && filteredTmdb.length === 0 && (
           <div className={styles.stateMsg}>No items found in this collection.</div>
         )}
       </>
     )
   }
 
-  if (viewItems.items.length > 0) {
+  if (sortedEmby.length > 0) {
     return (
-      <div className={styles.itemGrid}>
-        {viewItems.items.map((item: EmbyItem) => (
-          <ItemCard key={item.Id} item={item} navigate={navigate} />
-        ))}
-      </div>
+      <>
+        {filtered && (
+          <p className={styles.resultCount}>
+            Showing {sortedEmby.length} of {totalEmby}
+          </p>
+        )}
+        <div className={styles.itemGrid}>
+          {sortedEmby.map((item: EmbyItem) => (
+            <ItemCard key={item.Id} item={item} navigate={navigate} />
+          ))}
+        </div>
+      </>
     )
   }
 
   return <div className={styles.stateMsg}>No items in this collection yet.</div>
+}
+
+// ── Filter panel ──────────────────────────────────────────────────────────────
+
+function FilterPanel({
+  viewItems,
+  filters,
+  onChange,
+  onClear,
+}: {
+  viewItems: PreviewResult | null
+  filters: FilterState
+  onChange: (patch: Partial<FilterState>) => void
+  onClear: () => void
+}) {
+  // Derive available genres and ratings from the actual items
+  const { genres, ratings } = useMemo(() => {
+    const embyItems: EmbyItem[] = viewItems
+      ? ('inCollection' in viewItems ? viewItems.inCollection : viewItems.items)
+      : []
+    const genreSet = new Set<string>()
+    const ratingSet = new Set<string>()
+    for (const item of embyItems) {
+      item.Genres?.forEach((g) => genreSet.add(g))
+      if (item.OfficialRating) ratingSet.add(item.OfficialRating)
+    }
+    return {
+      genres: [...genreSet].sort(),
+      ratings: [...ratingSet].sort(),
+    }
+  }, [viewItems])
+
+  const active = isFiltered(filters)
+
+  return (
+    <div className={styles.filterPanel}>
+      {/* Row 1: Search + Type + Sort */}
+      <div className={styles.filterRow}>
+        {/* Search */}
+        <div className={styles.searchWrap}>
+          <svg className={styles.searchIcon} width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <circle cx="6" cy="6" r="4.5" />
+            <line x1="9.5" y1="9.5" x2="13" y2="13" />
+          </svg>
+          <input
+            className={styles.searchInput}
+            type="text"
+            placeholder="Search items…"
+            value={filters.search}
+            onChange={(e) => onChange({ search: e.target.value })}
+          />
+          {filters.search && (
+            <button className={styles.searchClear} onClick={() => onChange({ search: '' })} title="Clear">×</button>
+          )}
+        </div>
+
+        {/* Type pills */}
+        <div className={styles.filterGroup}>
+          {(['all', 'Movie', 'Series'] as const).map((v) => (
+            <button
+              key={v}
+              className={`${styles.filterBtn} ${filters.type === v ? styles.filterBtnActive : ''}`}
+              onClick={() => onChange({ type: v })}
+            >
+              {v === 'all' ? 'All types' : v}
+            </button>
+          ))}
+        </div>
+
+        {/* Sort */}
+        <div className={styles.sortWrap}>
+          <select
+            className={styles.sortSelect}
+            value={filters.sort}
+            onChange={(e) => onChange({ sort: e.target.value as SortKey })}
+          >
+            <option value="name-asc">Name A → Z</option>
+            <option value="name-desc">Name Z → A</option>
+            <option value="year-desc">Year (newest)</option>
+            <option value="year-asc">Year (oldest)</option>
+            <option value="rating-desc">Rating (high)</option>
+            <option value="rating-asc">Rating (low)</option>
+          </select>
+        </div>
+
+        {active && (
+          <button className={styles.clearAll} onClick={onClear}>Clear filters</button>
+        )}
+      </div>
+
+      {/* Row 2: Year range */}
+      <div className={styles.filterRow}>
+        <span className={styles.filterLabel}>Year</span>
+        <input
+          className={styles.yearInput}
+          type="number"
+          placeholder="From"
+          min="1900"
+          max="2099"
+          value={filters.yearFrom}
+          onChange={(e) => onChange({ yearFrom: e.target.value })}
+        />
+        <span className={styles.filterSep}>–</span>
+        <input
+          className={styles.yearInput}
+          type="number"
+          placeholder="To"
+          min="1900"
+          max="2099"
+          value={filters.yearTo}
+          onChange={(e) => onChange({ yearTo: e.target.value })}
+        />
+      </div>
+
+      {/* Row 3: Genres (dynamic) */}
+      {genres.length > 0 && (
+        <div className={styles.filterRow}>
+          <span className={styles.filterLabel}>Genre</span>
+          <div className={styles.chipGroup}>
+            {genres.map((g) => (
+              <button
+                key={g}
+                className={`${styles.chip} ${filters.genres.includes(g) ? styles.chipActive : ''}`}
+                onClick={() => {
+                  const next = filters.genres.includes(g)
+                    ? filters.genres.filter((x) => x !== g)
+                    : [...filters.genres, g]
+                  onChange({ genres: next })
+                }}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Row 4: Ratings (dynamic) */}
+      {ratings.length > 0 && (
+        <div className={styles.filterRow}>
+          <span className={styles.filterLabel}>Rating</span>
+          <div className={styles.chipGroup}>
+            {ratings.map((r) => (
+              <button
+                key={r}
+                className={`${styles.chip} ${filters.ratings.includes(r) ? styles.chipActive : ''}`}
+                onClick={() => {
+                  const next = filters.ratings.includes(r)
+                    ? filters.ratings.filter((x) => x !== r)
+                    : [...filters.ratings, r]
+                  onChange({ ratings: next })
+                }}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -172,6 +444,11 @@ export default function CollectionDetail() {
   const qc = useQueryClient()
 
   const [editorOpen, setEditorOpen] = useState(false)
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS)
+
+  function patchFilters(patch: Partial<FilterState>) {
+    setFilters((prev) => ({ ...prev, ...patch }))
+  }
 
   // Reuse the collections list query — already cached from the grid page
   const { data: collections = [], isLoading: collectionsLoading } = useQuery({
@@ -356,7 +633,19 @@ export default function CollectionDetail() {
         {itemsLoading ? (
           <div className={styles.stateMsg}>Loading items…</div>
         ) : (
-          <ExpandedOrStandardView viewItems={viewItems ?? null} navigate={navigate} />
+          <>
+            <FilterPanel
+              viewItems={viewItems ?? null}
+              filters={filters}
+              onChange={patchFilters}
+              onClear={() => setFilters(DEFAULT_FILTERS)}
+            />
+            <ExpandedOrStandardView
+              viewItems={viewItems ?? null}
+              filters={filters}
+              navigate={navigate}
+            />
+          </>
         )}
       </div>
 

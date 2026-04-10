@@ -83,6 +83,8 @@ export interface EmbyItem {
   Genres: string[]
   Tags?: string[]
   ProductionYear?: number
+  OfficialRating?: string
+  CommunityRating?: number
   Overview?: string
   ProviderIds?: { Imdb?: string; IMDB?: string; Tvdb?: string; TVDB?: string; Tmdb?: string; TMDB?: string }
   ImageTags?: { Primary?: string; [key: string]: string | undefined }
