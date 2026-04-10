@@ -40,11 +40,15 @@ function tmdbPosterUrl(posterPath: string | null): string | null {
 
 // ── Item card (Emby) ───────────────────────────────────────────────────────────
 
-function ItemCard({ item }: { item: EmbyItem }) {
+function ItemCard({ item, navigate }: { item: EmbyItem; navigate: ReturnType<typeof useNavigate> }) {
   const posterUrl = itemPosterUrl(item)
 
   return (
-    <div className={styles.itemCard}>
+    <div
+      className={styles.itemCard}
+      style={{ cursor: 'pointer' }}
+      onClick={() => navigate(`/library/item/${item.Id}`)}
+    >
       {posterUrl ? (
         <img src={posterUrl} alt={item.Name} className={styles.itemPosterImg} />
       ) : (
@@ -63,12 +67,28 @@ function ItemCard({ item }: { item: EmbyItem }) {
 
 // ── TMDB match card (purple glow) ─────────────────────────────────────────────
 
-function TmdbMatchCard({ item }: { item: TmdbDiscoveryItem }) {
+function TmdbMatchCard({ item, navigate }: { item: TmdbDiscoveryItem; navigate: ReturnType<typeof useNavigate> }) {
   const posterUrl = tmdbPosterUrl(item.poster_path)
   const year = item.type === 'movie' ? item.release_date?.slice(0, 4) : item.first_air_date?.slice(0, 4)
 
+  function handleClick() {
+    const params = new URLSearchParams({
+      source: 'tmdb',
+      tmdbId: String(item.id),
+      type: item.type,
+      name: item.name,
+      ...(year ? { year } : {}),
+      ...(item.poster_path ? { poster: item.poster_path } : {}),
+    })
+    navigate(`/library/item/${item.id}?${params.toString()}`)
+  }
+
   return (
-    <div className={`${styles.itemCard} ${styles.itemCardGlow}`}>
+    <div
+      className={`${styles.itemCard} ${styles.itemCardGlow}`}
+      style={{ cursor: 'pointer' }}
+      onClick={handleClick}
+    >
       {posterUrl ? (
         <img src={posterUrl} alt={item.name} className={styles.itemPosterImg} />
       ) : (
@@ -88,7 +108,7 @@ function TmdbMatchCard({ item }: { item: TmdbDiscoveryItem }) {
 type StandardPreview = { count: number; items: EmbyItem[] }
 type PreviewResult = StandardPreview | ExpandedPreviewResponse
 
-function ExpandedOrStandardView({ viewItems }: { viewItems: PreviewResult | null }) {
+function ExpandedOrStandardView({ viewItems, navigate }: { viewItems: PreviewResult | null; navigate: ReturnType<typeof useNavigate> }) {
   if (!viewItems) {
     return <div className={styles.stateMsg}>No items in this collection yet.</div>
   }
@@ -104,7 +124,7 @@ function ExpandedOrStandardView({ viewItems }: { viewItems: PreviewResult | null
             </p>
             <div className={styles.itemGrid}>
               {expanded.inCollection.map((item: EmbyItem) => (
-                <ItemCard key={item.Id} item={item} />
+                <ItemCard key={item.Id} item={item} navigate={navigate} />
               ))}
             </div>
           </>
@@ -117,7 +137,7 @@ function ExpandedOrStandardView({ viewItems }: { viewItems: PreviewResult | null
             </p>
             <div className={styles.itemGrid}>
               {expanded.notInCollection.map((item) => (
-                <TmdbMatchCard key={`tmdb-${item.id}`} item={item} />
+                <TmdbMatchCard key={`tmdb-${item.id}`} item={item} navigate={navigate} />
               ))}
             </div>
           </div>
@@ -134,7 +154,7 @@ function ExpandedOrStandardView({ viewItems }: { viewItems: PreviewResult | null
     return (
       <div className={styles.itemGrid}>
         {viewItems.items.map((item: EmbyItem) => (
-          <ItemCard key={item.Id} item={item} />
+          <ItemCard key={item.Id} item={item} navigate={navigate} />
         ))}
       </div>
     )
@@ -336,7 +356,7 @@ export default function CollectionDetail() {
         {itemsLoading ? (
           <div className={styles.stateMsg}>Loading items…</div>
         ) : (
-          <ExpandedOrStandardView viewItems={viewItems ?? null} />
+          <ExpandedOrStandardView viewItems={viewItems ?? null} navigate={navigate} />
         )}
       </div>
 

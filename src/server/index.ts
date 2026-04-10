@@ -8,6 +8,8 @@ import settingsRouter from './routes/settings'
 import collectionsRouter from './routes/collections'
 import syncRouter from './routes/sync'
 import libraryRouter from './routes/library'
+import sonarrRouter from './routes/sonarr'
+import radarrRouter from './routes/radarr'
 import { getEmbyClient } from './emby/client'
 import { getAllSettings } from './db/queries'
 import { IMAGES_DIR } from './sync/engine'
@@ -29,6 +31,8 @@ app.use('/api/settings', settingsRouter)
 app.use('/api/collections', collectionsRouter)
 app.use('/api/sync', syncRouter)
 app.use('/api/library', libraryRouter)
+app.use('/api/sonarr', sonarrRouter)
+app.use('/api/radarr', radarrRouter)
 
 // Health check
 app.get('/api/health', (_req, res) => {

@@ -30,6 +30,10 @@
   letter-spacing: 0.04em;
 }
 
+.brandPrefix {
+  color: var(--accent-purple);
+}
+
 .brandTag {
   display: block;
   font-size: 11px;
@@ -76,8 +80,8 @@
   gap: 8px;
   padding: 10px 20px;
   font-size: 11px;
-  color: var(--accent-gold);
-  background: var(--accent-gold-glow);
+  color: var(--accent-purple);
+  background: var(--accent-purple-glow);
   border-top: 1px solid var(--border-accent);
   border-bottom: 1px solid var(--border-accent);
   letter-spacing: 0.04em;
@@ -87,7 +91,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent-gold);
+  background: var(--accent-purple);
   animation: pulse 1.5s ease-in-out infinite;
 }
 

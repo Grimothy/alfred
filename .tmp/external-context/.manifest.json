@@ -1,0 +1,29 @@
+{
+  "files": [
+    {
+      "path": "emby/home-screen-spotlight.md",
+      "library": "emby",
+      "topic": "home-screen-spotlight-featured-content",
+      "fetched": "2026-04-08T01:52:00Z",
+      "sources": [
+        "https://emby.media/community/topic/146080-plugin-home-screen-companion/",
+        "https://github.com/soderlund91/HomeScreenCompanion",
+        "https://dev.emby.media/reference/RestAPI/DisplayPreferencesService.html",
+        "https://emby.media/premiere.html"
+      ]
+    },
+    {
+      "path": "tmdb-api-research.md",
+      "library": "tmdb",
+      "topic": "studio-franchise-collection-groupings",
+      "fetched": "2026-04-08T02:12:00Z",
+      "sources": [
+        "https://developer.themoviedb.org/openapi/tmdb-api.json",
+        "https://developers.themoviedb.org/docs",
+        "https://trakt.docs.apiary.io/",
+        "https://www.omdbapi.com/",
+        "https://imdb.com/interfaces/"
+      ]
+    }
+  ]
+}

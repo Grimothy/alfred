@@ -3,7 +3,7 @@
   height: 20px;
   border-radius: 10px;
   border: 1px solid var(--border-subtle);
-  background: var(--bg-elevated);
+  background: transparent;
   position: relative;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s;
@@ -11,8 +11,8 @@
 }
 
 .toggle.on {
-  background: var(--accent-gold);
-  border-color: var(--accent-gold);
+  background: var(--accent-purple);
+  border-color: var(--accent-purple);
 }
 
 .toggle.disabled {
@@ -27,7 +27,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--text-muted);
+  background: var(--text-secondary);
   transition: transform 0.2s, background 0.2s;
 }
 

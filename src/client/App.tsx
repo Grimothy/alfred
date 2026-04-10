@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Collections from './pages/Collections'
 import CollectionDetail from './pages/CollectionDetail'
 import Library from './pages/Library'
+import MediaDetail from './pages/MediaDetail'
 import History from './pages/History'
 import Settings from './pages/Settings'
 import Setup from './pages/Setup'
@@ -27,7 +28,7 @@ export default function App() {
     <div className={styles.layout}>
       <nav className={styles.sidebar}>
         <div className={styles.brand}>
-          <span className={styles.brandName}>Alfred</span>
+          <span className={styles.brandName}><span className={styles.brandPrefix}>Al</span>fred</span>
           <span className={styles.brandTag}>at your service.</span>
         </div>
 
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="/collections" element={<Collections />} />
           <Route path="/collections/:id" element={<CollectionDetail />} />
           <Route path="/library" element={<Library />} />
+          <Route path="/library/item/:id" element={<MediaDetail />} />
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/setup" element={<Setup />} />

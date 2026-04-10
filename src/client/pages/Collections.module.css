@@ -41,6 +41,157 @@
   gap: 16px;
 }
 
+/* ── Toolbar ─────────────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 180px;
+  max-width: 260px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  color: var(--text-muted);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 7px 28px 7px 30px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.searchInput::placeholder {
+  color: var(--text-muted);
+}
+
+.searchInput:focus {
+  border-color: var(--accent-gold);
+}
+
+.searchClear {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.12s;
+}
+
+.searchClear:hover {
+  color: var(--text-primary);
+}
+
+/* ── Filter pill groups ───────────────────────────────────────── */
+.filterGroup {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+
+.filterBtn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 2px);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.filterBtn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.filterBtnActive {
+  background: var(--accent-gold-glow);
+  border-color: rgba(201, 168, 76, 0.35);
+  color: var(--accent-gold);
+}
+
+/* ── Sort select ─────────────────────────────────────────────── */
+.sortSelect {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 7px 10px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%235c5a54' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+.sortSelect:focus {
+  border-color: var(--accent-gold);
+}
+
+/* ── Clear all + result count ────────────────────────────────── */
+.clearAll {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  transition: color 0.12s;
+  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.clearAll:hover {
+  color: var(--text-primary);
+}
+
+.resultCount {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  letter-spacing: 0.03em;
+}
+
 /* ── Poster card grid ────────────────────────────────────────── */
 .grid {
   display: grid;
@@ -111,29 +262,20 @@
   top: 8px;
   right: 8px;
   z-index: 3;
-  background: rgba(20, 20, 25, 0.72);
   border-radius: 20px;
   padding: 3px 6px;
-  backdrop-filter: blur(4px);
 }
 
 /* ── Hover action bar (Edit + Remove only) ───────────────────── */
 .cardActions {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 4;
+  bottom: 8px;
+  right: 8px;
+  z-index: 5;
   display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 10px;
-  background: linear-gradient(
-    to bottom,
-    rgba(10, 10, 14, 0.85) 0%,
-    transparent 100%
-  );
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;
@@ -144,35 +286,78 @@
   pointer-events: all;
 }
 
+.dotsBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(20, 20, 25, 0.72);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  color: var(--text-secondary);
+  backdrop-filter: blur(4px);
+}
+
+.dotsBtn:hover {
+  background: rgba(147, 112, 219, 0.25);
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+}
+
+.dotsBtn.open {
+  background: rgba(147, 112, 219, 0.25);
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+}
+
+.dotsMenu {
+  position: absolute;
+  bottom: 34px;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  min-width: 100px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .actionBtn {
-  background: rgba(201, 168, 76, 0.12);
-  border: 1px solid rgba(201, 168, 76, 0.3);
-  color: var(--accent-gold);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
-  padding: 4px 10px;
+  padding: 5px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
   white-space: nowrap;
+  text-align: left;
+  width: 100%;
 }
 
 .actionBtn:hover {
-  background: rgba(201, 168, 76, 0.22);
-  border-color: rgba(201, 168, 76, 0.55);
+  background: var(--accent-purple-glow);
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
 }
 
 .actionBtnDanger {
   color: var(--text-muted);
-  background: rgba(255, 80, 80, 0.08);
-  border-color: rgba(255, 80, 80, 0.25);
 }
 
 .actionBtnDanger:hover {
   color: #ff6b6b;
-  background: rgba(255, 80, 80, 0.18);
-  border-color: rgba(255, 80, 80, 0.5);
+  background: rgba(255, 80, 80, 0.12);
+  border-color: rgba(255, 80, 80, 0.4);
 }
 
 .actionBtn:disabled {
