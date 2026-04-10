@@ -180,7 +180,7 @@ function ExpandedOrStandardView({
     return true
   })
 
-  // Apply filters to TMDB items (search + year + type only — no rating/genre data)
+  // Apply filters to TMDB items (search + year + type only — no rating/genre data available)
   const filteredTmdb = allTmdb.filter((item) => {
     if (filters.search && !item.name.toLowerCase().includes(filters.search.toLowerCase())) return false
     if (filters.type !== 'all') {
@@ -191,10 +191,6 @@ function ExpandedOrStandardView({
     const year = rawYear ? parseInt(rawYear.slice(0, 4)) : undefined
     if (filters.yearFrom && year && year < parseInt(filters.yearFrom)) return false
     if (filters.yearTo && year && year > parseInt(filters.yearTo)) return false
-    // If rating filter is active, TMDB items have no rating — hide them
-    if (filters.ratings.length > 0) return false
-    // If genre filter is active, TMDB items have no genre — hide them
-    if (filters.genres.length > 0) return false
     return true
   })
 
@@ -386,7 +382,7 @@ function FilterPanel({
         />
       </div>
 
-      {/* Row 3: Genres (dynamic) */}
+      {/* Row 3: Genres (dynamic — Emby items only) */}
       {genres.length > 0 && (
         <div className={styles.filterRow}>
           <span className={styles.filterLabel}>Genre</span>
@@ -406,10 +402,11 @@ function FilterPanel({
               </button>
             ))}
           </div>
+          <span className={styles.filterHint}>Emby items only</span>
         </div>
       )}
 
-      {/* Row 4: Ratings (dynamic) */}
+      {/* Row 4: Ratings (dynamic — Emby items only) */}
       {ratings.length > 0 && (
         <div className={styles.filterRow}>
           <span className={styles.filterLabel}>Rating</span>
@@ -429,6 +426,7 @@ function FilterPanel({
               </button>
             ))}
           </div>
+          <span className={styles.filterHint}>Emby items only</span>
         </div>
       )}
     </div>
