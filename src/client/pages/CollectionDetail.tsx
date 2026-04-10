@@ -180,7 +180,7 @@ function ExpandedOrStandardView({
     return true
   })
 
-  // Apply filters to TMDB items (search + year + type only — no rating/genre data available)
+  // Apply filters to TMDB items (search + year + type only — no genre/rating data available)
   const filteredTmdb = allTmdb.filter((item) => {
     if (filters.search && !item.name.toLowerCase().includes(filters.search.toLowerCase())) return false
     if (filters.type !== 'all') {
@@ -191,9 +191,6 @@ function ExpandedOrStandardView({
     const year = rawYear ? parseInt(rawYear.slice(0, 4)) : undefined
     if (filters.yearFrom && year && year < parseInt(filters.yearFrom)) return false
     if (filters.yearTo && year && year > parseInt(filters.yearTo)) return false
-    // TMDB items have no genre or rating data — exclude them when those filters are active
-    if (filters.genres.length > 0) return false
-    if (filters.ratings.length > 0) return false
     return true
   })
 
