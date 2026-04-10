@@ -12,6 +12,19 @@ export interface EmbyItem {
   PremiereDate?: string
   ProviderIds?: { Imdb?: string; IMDB?: string; Tvdb?: string; TVDB?: string }
   ImageTags?: { Primary?: string; [key: string]: string | undefined }
+  BackdropImageTags?: string[]
+  Overview?: string
+  SeasonCount?: number
+  CumulativeRuntime?: number
+  EpisodeRunTime?: number[]
+  Seasons?: EmbySeason[]
+}
+
+export interface EmbySeason {
+  SeasonNumber: number
+  EpisodeCount: number
+  ImageTags?: { Primary?: string }
+  EpisodesInSeason?: number
 }
 
 export interface EmbyCollection {
@@ -204,6 +217,114 @@ export class EmbyClient {
         maxBodyLength: 20 * 1024 * 1024, // 20 MB
       }
     )
+  }
+
+  // ── Episodes for a series ────────────────────────────────────────────────────
+
+  async getEpisodes(seriesId: string): Promise<{ SeasonId: string; SeasonNumber: number }[]> {
+    const episodes: { SeasonId: string; SeasonNumber: number }[] = []
+    const limit = 500
+    let startIndex = 0
+
+    while (true) {
+      const res = await this.http.get(`/emby/Shows/${seriesId}/Episodes`, {
+        params: {
+          StartIndex: startIndex,
+          Limit: limit,
+          Fields: 'Id',
+        },
+      })
+      const raw: { SeasonId?: string; ParentId?: string; ParentIndexNumber?: number }[] = res.data.Items ?? []
+      const page = raw.map((ep) => ({
+        SeasonId: ep.SeasonId ?? ep.ParentId ?? '',
+        SeasonNumber: ep.ParentIndexNumber ?? 0,
+      }))
+      episodes.push(...page)
+      if (episodes.length >= res.data.TotalRecordCount || page.length === 0) break
+      startIndex += limit
+    }
+
+    return episodes
+  }
+
+  // ── Seasons for a series ─────────────────────────────────────────────────────
+
+  async getSeasons(seriesId: string): Promise<EmbySeason[]> {
+    const res = await this.http.get(`/emby/Shows/${seriesId}/Seasons`, {
+      params: {
+        Fields: 'ImageTags',
+      },
+    })
+    return (res.data.Items ?? []).map((s: { IndexNumber?: number; ChildCount?: number; ImageTags?: { Primary?: string } }) => ({
+      SeasonNumber: s.IndexNumber ?? 0,
+      EpisodeCount: s.ChildCount ?? 0,
+      ImageTags: s.ImageTags,
+    })) as EmbySeason[]
+  }
+
+  async getItemByTmdbId(tmdbId: string): Promise<EmbyItem | null> {
+    const res = await this.http.get('/emby/Items', {
+      params: {
+        AnyProviderIdEquals: `Tmdb.${tmdbId}`,
+        Recursive: true,
+        IncludeItemTypes: 'Movie,Series',
+        Fields: 'Studios,Genres,Tags,ProductionYear,ProviderIds,ImageTags,BackdropImageTags,Overview,SeriesStudio,SeasonCount,CumulativeRuntime,EpisodeRunTime',
+      },
+    })
+    const item = res.data.Items?.[0] as EmbyItem | undefined
+    if (!item) return null
+
+    if (item.Type === 'Series') {
+      const [seasons, episodes] = await Promise.all([
+        this.getSeasons(item.Id),
+        this.getEpisodes(item.Id),
+      ])
+      const countBySeason = new Map<number, number>()
+      for (const ep of episodes) {
+        countBySeason.set(ep.SeasonNumber, (countBySeason.get(ep.SeasonNumber) ?? 0) + 1)
+      }
+      for (const season of seasons) {
+        season.EpisodesInSeason = countBySeason.get(season.SeasonNumber) ?? 0
+        season.EpisodeCount = season.EpisodesInSeason
+      }
+      item.Seasons = seasons
+    }
+
+    return item
+  }
+
+  // ── Single item (full detail) ────────────────────────────────────────────────
+
+  async getItemById(id: string): Promise<EmbyItem> {
+    const res = await this.http.get('/emby/Items', {
+      params: {
+        Ids: id,
+        Recursive: true,
+        Fields: 'Studios,Genres,Tags,ProductionYear,ProviderIds,ImageTags,BackdropImageTags,Overview,SeriesStudio,SeasonCount,CumulativeRuntime,EpisodeRunTime',
+      },
+    })
+    const item = res.data.Items?.[0] as EmbyItem | undefined
+    if (!item) throw new Error(`Item ${id} not found`)
+
+    // For series, fetch seasons and enrich with actual episode counts in the library
+    if (item.Type === 'Series') {
+      const [seasons, episodes] = await Promise.all([
+        this.getSeasons(id),
+        this.getEpisodes(id),
+      ])
+      const countBySeason = new Map<number, number>()
+      for (const ep of episodes) {
+        countBySeason.set(ep.SeasonNumber, (countBySeason.get(ep.SeasonNumber) ?? 0) + 1)
+      }
+      for (const season of seasons) {
+        season.EpisodesInSeason = countBySeason.get(season.SeasonNumber) ?? 0
+        // EpisodeCount = what Emby has (no external total available from this endpoint)
+        season.EpisodeCount = season.EpisodesInSeason
+      }
+      item.Seasons = seasons
+    }
+
+    return item
   }
 
   // ── System ───────────────────────────────────────────────────────────────────

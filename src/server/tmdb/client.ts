@@ -45,6 +45,45 @@ export interface TmdbTvShow {
   poster_path?: string | null
 }
 
+export interface TmdbTvSeason {
+  season_number: number
+  episode_count: number
+  name: string
+  overview?: string
+  air_date?: string
+  poster_path?: string | null
+}
+
+export interface TmdbTvDetail {
+  id: number
+  name: string
+  overview: string
+  first_air_date?: string
+  last_air_date?: string
+  status?: string
+  poster_path?: string | null
+  backdrop_path?: string | null
+  genres: { id: number; name: string }[]
+  networks: { id: number; name: string; logo_path?: string | null }[]
+  seasons: TmdbTvSeason[]
+  number_of_seasons: number
+  number_of_episodes: number
+  external_ids?: { imdb_id?: string | null; tvdb_id?: number | null }
+}
+
+export interface TmdbMovieDetail {
+  id: number
+  title: string
+  overview: string
+  release_date?: string
+  runtime?: number
+  poster_path?: string | null
+  backdrop_path?: string | null
+  genres: { id: number; name: string }[]
+  production_companies: { id: number; name: string }[]
+  external_ids?: { imdb_id?: string | null }
+}
+
 // ── Known networks ────────────────────────────────────────────────────────────
 // TMDB has no /search/network endpoint. This static list covers the major
 // streaming services and broadcast networks with their canonical TMDB IDs.
@@ -266,6 +305,61 @@ export class TmdbClient {
     }
 
     return shows
+  }
+
+  // ── Detail fetchers ──────────────────────────────────────────────────────────
+
+  /** Fetches full TV show details including seasons and external IDs. */
+  async getTvDetails(tmdbId: number): Promise<TmdbTvDetail> {
+    const res = await this.http.get(`/tv/${tmdbId}`, {
+      params: { append_to_response: 'external_ids' },
+    })
+    const d = res.data
+    return {
+      id: d.id,
+      name: d.name,
+      overview: d.overview ?? '',
+      first_air_date: d.first_air_date,
+      last_air_date: d.last_air_date,
+      status: d.status,
+      poster_path: d.poster_path ?? null,
+      backdrop_path: d.backdrop_path ?? null,
+      genres: d.genres ?? [],
+      networks: d.networks ?? [],
+      seasons: (d.seasons ?? [])
+        .filter((s: { season_number: number }) => s.season_number > 0)
+        .map((s: { season_number: number; episode_count: number; name: string; overview?: string; air_date?: string; poster_path?: string | null }) => ({
+          season_number: s.season_number,
+          episode_count: s.episode_count,
+          name: s.name,
+          overview: s.overview,
+          air_date: s.air_date,
+          poster_path: s.poster_path ?? null,
+        })),
+      number_of_seasons: d.number_of_seasons ?? 0,
+      number_of_episodes: d.number_of_episodes ?? 0,
+      external_ids: d.external_ids,
+    }
+  }
+
+  /** Fetches full movie details including external IDs. */
+  async getMovieDetails(tmdbId: number): Promise<TmdbMovieDetail> {
+    const res = await this.http.get(`/movie/${tmdbId}`, {
+      params: { append_to_response: 'external_ids' },
+    })
+    const d = res.data
+    return {
+      id: d.id,
+      title: d.title,
+      overview: d.overview ?? '',
+      release_date: d.release_date,
+      runtime: d.runtime,
+      poster_path: d.poster_path ?? null,
+      backdrop_path: d.backdrop_path ?? null,
+      genres: d.genres ?? [],
+      production_companies: d.production_companies ?? [],
+      external_ids: d.external_ids,
+    }
   }
 
   // ── Internal helpers ─────────────────────────────────────────────────────────

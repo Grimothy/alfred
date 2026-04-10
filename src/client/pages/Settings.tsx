@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSettings, updateSettings, testConnection, testTmdbConnection, refreshTmdbCache } from '../api'
+import { getSettings, updateSettings, testConnection, testTmdbConnection, refreshTmdbCache, testSonarrConnection, testRadarrConnection } from '../api'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import styles from './Settings.module.css'
@@ -53,6 +53,26 @@ export default function Settings() {
   const [tmdbCacheResult, setTmdbCacheResult] = useState<string | null>(null)
   const [tmdbCacheLoading, setTmdbCacheLoading] = useState(false)
 
+  // Sonarr state
+  const [sonarrUrl, setSonarrUrl] = useState('')
+  const [sonarrApiKey, setSonarrApiKey] = useState('')
+  const [showSonarrKey, setShowSonarrKey] = useState(false)
+  const [sonarrTestResult, setSonarrTestResult] = useState<{
+    ok: boolean
+    message: string
+  } | null>(null)
+  const [sonarrTestLoading, setSonarrTestLoading] = useState(false)
+
+  // Radarr state
+  const [radarrUrl, setRadarrUrl] = useState('')
+  const [radarrApiKey, setRadarrApiKey] = useState('')
+  const [showRadarrKey, setShowRadarrKey] = useState(false)
+  const [radarrTestResult, setRadarrTestResult] = useState<{
+    ok: boolean
+    message: string
+  } | null>(null)
+  const [radarrTestLoading, setRadarrTestLoading] = useState(false)
+
   useEffect(() => {
     if (settings) {
       setHost(settings.emby_host ?? '')
@@ -60,6 +80,10 @@ export default function Settings() {
       setTmdbApiKey(settings.tmdb_api_key ?? '')
       setSchedule(settings.sync_schedule ?? '0 3 * * *')
       setSyncEnabled(settings.sync_enabled === 'true')
+      setSonarrUrl(settings.sonarr_url ?? '')
+      setSonarrApiKey(settings.sonarr_api_key ?? '')
+      setRadarrUrl(settings.radarr_url ?? '')
+      setRadarrApiKey(settings.radarr_api_key ?? '')
 
       const presetIndex = SCHEDULE_PRESETS.findIndex((p) => p.value === settings.sync_schedule)
       setSchedulePreset(presetIndex >= 0 ? presetIndex : CUSTOM_INDEX)
@@ -113,6 +137,18 @@ export default function Settings() {
     if (tmdbApiKey && tmdbApiKey !== '••••••••') {
       update['tmdb_api_key'] = tmdbApiKey
     }
+    if (sonarrUrl) {
+      update['sonarr_url'] = sonarrUrl
+    }
+    if (sonarrApiKey && sonarrApiKey !== '••••••••') {
+      update['sonarr_api_key'] = sonarrApiKey
+    }
+    if (radarrUrl) {
+      update['radarr_url'] = radarrUrl
+    }
+    if (radarrApiKey && radarrApiKey !== '••••••••') {
+      update['radarr_api_key'] = radarrApiKey
+    }
     saveMutation.mutate(update)
   }
 
@@ -145,6 +181,46 @@ export default function Settings() {
       setTmdbCacheResult(msg)
     } finally {
       setTmdbCacheLoading(false)
+    }
+  }
+
+  async function handleSonarrTest() {
+    setSonarrTestLoading(true)
+    setSonarrTestResult(null)
+    try {
+      const result = await testSonarrConnection(sonarrUrl, sonarrApiKey)
+      if (result.ok) {
+        setSonarrTestResult({ ok: true, message: `Connected to Sonarr (v${result.version})` })
+      } else {
+        setSonarrTestResult({ ok: false, message: result.error ?? 'Connection failed' })
+      }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error ?? 'Connection failed'
+      setSonarrTestResult({ ok: false, message: msg })
+    } finally {
+      setSonarrTestLoading(false)
+    }
+  }
+
+  async function handleRadarrTest() {
+    setRadarrTestLoading(true)
+    setRadarrTestResult(null)
+    try {
+      const result = await testRadarrConnection(radarrUrl, radarrApiKey)
+      if (result.ok) {
+        setRadarrTestResult({ ok: true, message: `Connected to Radarr (v${result.version})` })
+      } else {
+        setRadarrTestResult({ ok: false, message: result.error ?? 'Connection failed' })
+      }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error ?? 'Connection failed'
+      setRadarrTestResult({ ok: false, message: msg })
+    } finally {
+      setRadarrTestLoading(false)
     }
   }
 
@@ -281,6 +357,128 @@ export default function Settings() {
           <p className={styles.hint}>
             Re-resolves all cached TMDB company IDs. Use if company mappings appear stale.
           </p>
+        </Card>
+
+        <Card className={styles.section}>
+          <h2 className={styles.sectionTitle}>Sonarr Connection</h2>
+
+          <div className={styles.field}>
+            <label className={styles.label}>Sonarr URL</label>
+            <input
+              className={styles.input}
+              value={sonarrUrl}
+              onChange={(e) => setSonarrUrl(e.target.value)}
+              placeholder="http://localhost:8989"
+            />
+            <p className={styles.hint}>
+              Include protocol and port. Do not include a trailing slash.
+            </p>
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label}>API Key</label>
+            <div className={styles.inputRow}>
+              <input
+                className={styles.input}
+                type={showSonarrKey ? 'text' : 'password'}
+                value={sonarrApiKey}
+                onChange={(e) => setSonarrApiKey(e.target.value)}
+                placeholder="Your Sonarr API key"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSonarrKey((v) => !v)}
+              >
+                {showSonarrKey ? 'Hide' : 'Show'}
+              </Button>
+            </div>
+            <p className={styles.hint}>
+              Found in Sonarr → Settings → General → API Key.
+            </p>
+          </div>
+
+          <div className={styles.testRow}>
+            <Button
+              variant="secondary"
+              onClick={handleSonarrTest}
+              loading={sonarrTestLoading}
+              disabled={!sonarrUrl || !sonarrApiKey || sonarrApiKey === '••••••••'}
+            >
+              Test Connection
+            </Button>
+            {sonarrTestResult && (
+              <span
+                className={[
+                  styles.testResult,
+                  sonarrTestResult.ok ? styles.ok : styles.fail,
+                ].join(' ')}
+              >
+                {sonarrTestResult.message}
+              </span>
+            )}
+          </div>
+        </Card>
+
+        <Card className={styles.section}>
+          <h2 className={styles.sectionTitle}>Radarr Connection</h2>
+
+          <div className={styles.field}>
+            <label className={styles.label}>Radarr URL</label>
+            <input
+              className={styles.input}
+              value={radarrUrl}
+              onChange={(e) => setRadarrUrl(e.target.value)}
+              placeholder="http://localhost:7878"
+            />
+            <p className={styles.hint}>
+              Include protocol and port. Do not include a trailing slash.
+            </p>
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label}>API Key</label>
+            <div className={styles.inputRow}>
+              <input
+                className={styles.input}
+                type={showRadarrKey ? 'text' : 'password'}
+                value={radarrApiKey}
+                onChange={(e) => setRadarrApiKey(e.target.value)}
+                placeholder="Your Radarr API key"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowRadarrKey((v) => !v)}
+              >
+                {showRadarrKey ? 'Hide' : 'Show'}
+              </Button>
+            </div>
+            <p className={styles.hint}>
+              Found in Radarr → Settings → General → API Key.
+            </p>
+          </div>
+
+          <div className={styles.testRow}>
+            <Button
+              variant="secondary"
+              onClick={handleRadarrTest}
+              loading={radarrTestLoading}
+              disabled={!radarrUrl || !radarrApiKey || radarrApiKey === '••••••••'}
+            >
+              Test Connection
+            </Button>
+            {radarrTestResult && (
+              <span
+                className={[
+                  styles.testResult,
+                  radarrTestResult.ok ? styles.ok : styles.fail,
+                ].join(' ')}
+              >
+                {radarrTestResult.message}
+              </span>
+            )}
+          </div>
         </Card>
 
         <Card className={styles.section}>

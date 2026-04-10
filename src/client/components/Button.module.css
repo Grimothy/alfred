@@ -43,6 +43,16 @@
   background: var(--accent-gold-glow);
 }
 
+.purple {
+  background: var(--accent-purple);
+  color: #1a1a1f;
+  border-color: var(--accent-purple);
+}
+.purple:not(:disabled):hover {
+  background: var(--accent-purple-dim);
+  border-color: var(--accent-purple-dim);
+}
+
 .ghost {
   background: transparent;
   color: var(--text-secondary);

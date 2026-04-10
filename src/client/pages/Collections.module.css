@@ -111,29 +111,20 @@
   top: 8px;
   right: 8px;
   z-index: 3;
-  background: rgba(20, 20, 25, 0.72);
   border-radius: 20px;
   padding: 3px 6px;
-  backdrop-filter: blur(4px);
 }
 
 /* ── Hover action bar (Edit + Remove only) ───────────────────── */
 .cardActions {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 4;
+  bottom: 8px;
+  right: 8px;
+  z-index: 5;
   display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 10px;
-  background: linear-gradient(
-    to bottom,
-    rgba(10, 10, 14, 0.85) 0%,
-    transparent 100%
-  );
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;
@@ -144,35 +135,78 @@
   pointer-events: all;
 }
 
+.dotsBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(20, 20, 25, 0.72);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  color: var(--text-secondary);
+  backdrop-filter: blur(4px);
+}
+
+.dotsBtn:hover {
+  background: rgba(147, 112, 219, 0.25);
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+}
+
+.dotsBtn.open {
+  background: rgba(147, 112, 219, 0.25);
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+}
+
+.dotsMenu {
+  position: absolute;
+  bottom: 34px;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  min-width: 100px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .actionBtn {
-  background: rgba(201, 168, 76, 0.12);
-  border: 1px solid rgba(201, 168, 76, 0.3);
-  color: var(--accent-gold);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
-  padding: 4px 10px;
+  padding: 5px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
   white-space: nowrap;
+  text-align: left;
+  width: 100%;
 }
 
 .actionBtn:hover {
-  background: rgba(201, 168, 76, 0.22);
-  border-color: rgba(201, 168, 76, 0.55);
+  background: var(--accent-purple-glow);
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
 }
 
 .actionBtnDanger {
   color: var(--text-muted);
-  background: rgba(255, 80, 80, 0.08);
-  border-color: rgba(255, 80, 80, 0.25);
 }
 
 .actionBtnDanger:hover {
   color: #ff6b6b;
-  background: rgba(255, 80, 80, 0.18);
-  border-color: rgba(255, 80, 80, 0.5);
+  background: rgba(255, 80, 80, 0.12);
+  border-color: rgba(255, 80, 80, 0.4);
 }
 
 .actionBtn:disabled {

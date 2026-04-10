@@ -83,7 +83,26 @@ export interface EmbyItem {
   Genres: string[]
   Tags?: string[]
   ProductionYear?: number
+  Overview?: string
+  ProviderIds?: { Imdb?: string; IMDB?: string; Tvdb?: string; TVDB?: string; Tmdb?: string; TMDB?: string }
   ImageTags?: { Primary?: string; [key: string]: string | undefined }
+  BackdropImageTags?: string[]
+  // Series-specific
+  SeasonCount?: number
+  CumulativeRuntime?: number
+  EpisodeRunTime?: number[]
+  Seasons?: EmbySeason[]
+}
+
+export interface EmbySeason {
+  SeasonNumber: number
+  EpisodeCount: number
+  ImageTags?: { Primary?: string }
+  EpisodesInSeason?: number
+}
+
+export interface EmbyItemDetail extends EmbyItem {
+  // Full item including seasons for series
 }
 
 export interface Settings {
@@ -92,6 +111,10 @@ export interface Settings {
   sync_schedule: string
   sync_enabled: string
   tmdb_api_key: string
+  sonarr_url: string
+  sonarr_api_key: string
+  radarr_url: string
+  radarr_api_key: string
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -124,6 +147,160 @@ export const refreshTmdbCache = () =>
   api.post<{ refreshed: number; failed: number }>(
     '/settings/tmdb/cache/refresh'
   ).then((r) => r.data)
+
+// ── Sonarr ─────────────────────────────────────────────────────────────────────
+
+export const testSonarrConnection = (url?: string, apiKey?: string) =>
+  api
+    .post<{ ok: boolean; version?: string; error?: string }>('/sonarr/test', {
+      url,
+      apiKey,
+    })
+    .then((r) => r.data)
+
+export const getSonarrStatus = () =>
+  api
+    .get<{ configured: boolean; url: string | null; hasApiKey: boolean }>(
+      '/sonarr/status'
+    )
+    .then((r) => r.data)
+
+// ── Radarr ─────────────────────────────────────────────────────────────────────
+
+export const testRadarrConnection = (url?: string, apiKey?: string) =>
+  api
+    .post<{ ok: boolean; version?: string; error?: string }>('/radarr/test', {
+      url,
+      apiKey,
+    })
+    .then((r) => r.data)
+
+export const getRadarrStatus = () =>
+  api
+    .get<{ configured: boolean; url: string | null; hasApiKey: boolean }>(
+      '/radarr/status'
+    )
+    .then((r) => r.data)
+
+// ── Sonarr types ───────────────────────────────────────────────────────────────
+
+export interface SonarrQualityProfile {
+  id: number
+  name: string
+}
+
+export interface SonarrRootFolder {
+  id: number
+  path: string
+  freeSpace?: number
+}
+
+export interface SonarrSeriesItem {
+  id: number
+  title: string
+  tvdbId: number
+  titleSlug: string
+  status: string
+  monitored: boolean
+  seasons?: { seasonNumber: number; monitored: boolean }[]
+}
+
+export interface SonarrLookupResult {
+  tvdbId: number
+  title: string
+  titleSlug: string
+  year?: number
+  overview?: string
+  poster?: string
+  seasons?: { seasonNumber: number; episodeCount: number }[]
+}
+
+// ── Sonarr API functions ───────────────────────────────────────────────────────
+
+export const getSonarrQualityProfiles = () =>
+  api
+    .get<SonarrQualityProfile[]>('/sonarr/qualityprofiles')
+    .then((r) => r.data)
+
+export const getSonarrRootFolders = () =>
+  api.get<SonarrRootFolder[]>('/sonarr/rootfolders').then((r) => r.data)
+
+export const getSonarrSeries = () =>
+  api.get<SonarrSeriesItem[]>('/sonarr/series').then((r) => r.data)
+
+export const lookupSonarrSeries = (term: string) =>
+  api
+    .get<SonarrLookupResult[]>('/sonarr/lookup', { params: { term } })
+    .then((r) => r.data)
+
+export interface AddSonarrSeriesOptions {
+  tvdbId: number
+  title?: string
+  titleSlug?: string
+  seasonStatuses?: { seasonNumber: number; monitored: boolean }[]
+  qualityProfileId?: number
+  rootFolderPath?: string
+}
+
+export const addSonarrSeries = (payload: AddSonarrSeriesOptions) =>
+  api.post<SonarrSeriesItem>('/sonarr/series', payload).then((r) => r.data)
+
+// ── Radarr types ───────────────────────────────────────────────────────────────
+
+export interface RadarrQualityProfile {
+  id: number
+  name: string
+}
+
+export interface RadarrRootFolder {
+  id: number
+  path: string
+  freeSpace?: number
+}
+
+export interface RadarrMovieItem {
+  id: number
+  title: string
+  tmdbId: number
+  year?: number
+  status: string
+  monitored: boolean
+}
+
+export interface RadarrLookupResult {
+  tmdbId: number
+  title: string
+  year?: number
+  overview?: string
+  poster?: string
+}
+
+// ── Radarr API functions ───────────────────────────────────────────────────────
+
+export const getRadarrQualityProfiles = () =>
+  api
+    .get<RadarrQualityProfile[]>('/radarr/qualityprofiles')
+    .then((r) => r.data)
+
+export const getRadarrRootFolders = () =>
+  api.get<RadarrRootFolder[]>('/radarr/rootfolders').then((r) => r.data)
+
+export const getRadarrMovies = () =>
+  api.get<RadarrMovieItem[]>('/radarr/movie').then((r) => r.data)
+
+export const lookupRadarrMovie = (term: string) =>
+  api
+    .get<RadarrLookupResult[]>('/radarr/lookup', { params: { term } })
+    .then((r) => r.data)
+
+export interface AddRadarrMovieOptions {
+  tmdbId: number
+  qualityProfileId?: number
+  rootFolderPath?: string
+}
+
+export const addRadarrMovie = (payload: AddRadarrMovieOptions) =>
+  api.post<RadarrMovieItem>('/radarr/movie', payload).then((r) => r.data)
 
 export interface TmdbCompanyResult {
   id: number
@@ -263,4 +440,55 @@ export const getStudios = () =>
 export const getStudioItems = (name: string) =>
   api
     .get<EmbyItem[]>(`/library/studios/${encodeURIComponent(name)}/items`)
+    .then((r) => r.data)
+
+export const getItemDetail = (id: string, tmdbId?: string) =>
+  api
+    .get<EmbyItemDetail>(`/library/item/${id}`, { params: tmdbId ? { tmdbId } : undefined })
+    .then((r) => r.data)
+
+// ── TMDB detail (for items not yet in Emby) ───────────────────────────────────
+
+export interface TmdbTvSeason {
+  season_number: number
+  episode_count: number
+  name: string
+  overview?: string
+  air_date?: string
+  poster_path?: string | null
+}
+
+export interface TmdbTvDetail {
+  id: number
+  name: string
+  overview: string
+  first_air_date?: string
+  last_air_date?: string
+  status?: string
+  poster_path?: string | null
+  backdrop_path?: string | null
+  genres: { id: number; name: string }[]
+  networks: { id: number; name: string; logo_path?: string | null }[]
+  seasons: TmdbTvSeason[]
+  number_of_seasons: number
+  number_of_episodes: number
+  external_ids?: { imdb_id?: string | null; tvdb_id?: number | null }
+}
+
+export interface TmdbMovieDetail {
+  id: number
+  title: string
+  overview: string
+  release_date?: string
+  runtime?: number
+  poster_path?: string | null
+  backdrop_path?: string | null
+  genres: { id: number; name: string }[]
+  production_companies: { id: number; name: string }[]
+  external_ids?: { imdb_id?: string | null }
+}
+
+export const getTmdbDetail = (tmdbId: string, type: 'movie' | 'tv') =>
+  api
+    .get<TmdbTvDetail | TmdbMovieDetail>(`/library/tmdb/${tmdbId}`, { params: { type } })
     .then((r) => r.data)

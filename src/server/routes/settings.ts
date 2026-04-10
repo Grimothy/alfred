@@ -16,18 +16,24 @@ router.get('/', (_req, res) => {
   if (settings['tmdb_api_key']) {
     settings['tmdb_api_key'] = '••••••••'
   }
+  if (settings['sonarr_api_key']) {
+    settings['sonarr_api_key'] = '••••••••'
+  }
+  if (settings['radarr_api_key']) {
+    settings['radarr_api_key'] = '••••••••'
+  }
   res.json(settings)
 })
 
 router.put('/', (req, res) => {
   const body: Record<string, string> = req.body
-  const allowed = ['emby_host', 'emby_api_key', 'sync_schedule', 'sync_enabled', 'tmdb_api_key']
+  const allowed = ['emby_host', 'emby_api_key', 'sync_schedule', 'sync_enabled', 'tmdb_api_key', 'sonarr_url', 'sonarr_api_key', 'radarr_url', 'radarr_api_key']
   const update: Record<string, string> = {}
 
   for (const key of allowed) {
     if (body[key] !== undefined) {
       // Don't overwrite masked placeholders
-      if ((key === 'emby_api_key' || key === 'tmdb_api_key') && body[key] === '••••••••') continue
+      if (['emby_api_key', 'tmdb_api_key', 'sonarr_api_key', 'radarr_api_key'].includes(key) && body[key] === '••••••••') continue
       update[key] = body[key]
     }
   }

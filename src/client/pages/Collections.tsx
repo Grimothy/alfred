@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -45,6 +45,21 @@ function CollectionCard({
   onToggle: (enabled: boolean) => void
   deleteLoading: boolean
 }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
+
   const initials = c.name
     .split(/\s+/)
     .filter(Boolean)
@@ -73,19 +88,35 @@ function CollectionCard({
           <Toggle checked={c.enabled === 1} onChange={onToggle} />
         </div>
 
-        {/* Hover action bar — stops propagation so clicks don't navigate */}
+        {/* 3-dot action menu — bottom right */}
         <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
-          <button className={styles.actionBtn} onClick={onEdit} title="Edit collection">
-            Edit
-          </button>
           <button
-            className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-            onClick={onDelete}
-            disabled={deleteLoading}
-            title="Remove collection"
+            className={`${styles.dotsBtn} ${menuOpen ? styles.open : ''}`}
+            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
+            title="Actions"
+            aria-label="Collection actions"
           >
-            {deleteLoading ? '…' : 'Remove'}
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+              <circle cx="7" cy="2.5" r="1.2" />
+              <circle cx="7" cy="7" r="1.2" />
+              <circle cx="7" cy="11.5" r="1.2" />
+            </svg>
           </button>
+          {menuOpen && (
+            <div className={styles.dotsMenu} ref={menuRef}>
+              <button className={styles.actionBtn} onClick={() => { setMenuOpen(false); onEdit() }} title="Edit collection">
+                Edit
+              </button>
+              <button
+                className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
+                onClick={() => { setMenuOpen(false); onDelete() }}
+                disabled={deleteLoading}
+                title="Remove collection"
+              >
+                {deleteLoading ? '…' : 'Remove'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Bottom scrim: name + badges */}

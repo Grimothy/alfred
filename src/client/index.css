@@ -9,6 +9,12 @@
   --accent-purple: #9370DB;
   --accent-purple-dim: #7a5fc4;
   --accent-purple-glow: rgba(147, 112, 219, 0.22);
+  --accent-sonarr: #e89a4a;
+  --accent-sonarr-dim: #c47d35;
+  --accent-sonarr-glow: rgba(232, 154, 74, 0.15);
+  --accent-radarr: #7bc96f;
+  --accent-radarr-dim: #5faa52;
+  --accent-radarr-glow: rgba(123, 201, 111, 0.15);
   --text-primary: #f0eee8;
   --text-secondary: #9e9b92;
   --text-muted: #5c5a54;

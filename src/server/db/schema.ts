@@ -95,6 +95,10 @@ export function initDb(): void {
     sync_schedule: '0 3 * * *',
     sync_enabled: 'false',
     tmdb_api_key: '',
+    sonarr_url: '',
+    sonarr_api_key: '',
+    radarr_url: '',
+    radarr_api_key: '',
   }
 
   const insertSetting = db.prepare(
