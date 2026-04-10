@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/Grimothy/alfred/compare/alfred-v1.0.3...alfred-v1.1.0) (2026-04-10)
+
+
+### Features
+
+* add /api/version endpoint, display dynamically in UI ([74b55b1](https://github.com/Grimothy/alfred/commit/74b55b18239049dffb2eea76f38cfcf7b630aa89))
+
 ## [1.0.3](https://github.com/Grimothy/alfred/compare/alfred-v1.0.2...alfred-v1.0.3) (2026-04-09)
 
 
