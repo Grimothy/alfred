@@ -180,7 +180,7 @@ router.post('/movie', async (req, res) => {
       rootFolderPath: body.rootFolderPath ?? '',
       monitored: true,
       addOptions: {
-        searchForMovie: true,
+        searchForMovie: false,
       },
     }
 
@@ -190,13 +190,24 @@ router.post('/movie', async (req, res) => {
     })
     return res.status(201).json(resp.data)
   } catch (err) {
-    const msg = axios.isAxiosError(err)
-      ? err.response?.status === 409
-        ? 'Movie already exists in Radarr'
-        : err.response?.data?.error ?? err.message
-      : err instanceof Error
-        ? err.message
-        : String(err)
+    let msg = 'Failed to add movie to Radarr'
+    if (axios.isAxiosError(err)) {
+      if (err.response?.status === 409) {
+        msg = 'Movie already exists in Radarr'
+      } else {
+        const data = err.response?.data
+        // Radarr returns various error formats
+        if (typeof data === 'string') {
+          msg = data
+        } else if (Array.isArray(data)) {
+          msg = data.map((e: { errorMessage?: string; message?: string }) => e.errorMessage ?? e.message ?? String(e)).join('; ')
+        } else {
+          msg = data?.error ?? data?.message ?? `HTTP ${err.response?.status}: ${err.message}`
+        }
+      }
+    } else {
+      msg = err instanceof Error ? err.message : String(err)
+    }
     return res.status(400).json({ error: msg })
   }
 })
