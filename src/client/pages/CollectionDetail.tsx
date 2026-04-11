@@ -180,7 +180,10 @@ function ExpandedOrStandardView({
     return true
   })
 
-  // Apply filters to TMDB items (search + year + type only — no genre/rating data available)
+  // Apply filters to TMDB items (search + year + type + genre)
+  // Rating filter is skipped for TMDB items — OfficialRating labels (TV-MA, R, etc.)
+  // don't apply to TMDB vote_average in a meaningful way; genre filtering works well
+  // since we now have genre data enriched from TMDB detail API
   const filteredTmdb = allTmdb.filter((item) => {
     if (filters.search && !item.name.toLowerCase().includes(filters.search.toLowerCase())) return false
     if (filters.type !== 'all') {
@@ -191,6 +194,10 @@ function ExpandedOrStandardView({
     const year = rawYear ? parseInt(rawYear.slice(0, 4)) : undefined
     if (filters.yearFrom && year && year < parseInt(filters.yearFrom)) return false
     if (filters.yearTo && year && year > parseInt(filters.yearTo)) return false
+    if (filters.genres.length > 0) {
+      const itemGenres = item.genres ?? []
+      if (!filters.genres.some((g) => itemGenres.includes(g))) return false
+    }
     return true
   })
 

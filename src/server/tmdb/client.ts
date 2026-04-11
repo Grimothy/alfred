@@ -68,6 +68,7 @@ export interface TmdbTvDetail {
   seasons: TmdbTvSeason[]
   number_of_seasons: number
   number_of_episodes: number
+  vote_average: number
   external_ids?: { imdb_id?: string | null; tvdb_id?: number | null }
 }
 
@@ -81,6 +82,7 @@ export interface TmdbMovieDetail {
   backdrop_path?: string | null
   genres: { id: number; name: string }[]
   production_companies: { id: number; name: string }[]
+  vote_average: number
   external_ids?: { imdb_id?: string | null }
 }
 
@@ -338,6 +340,7 @@ export class TmdbClient {
         })),
       number_of_seasons: d.number_of_seasons ?? 0,
       number_of_episodes: d.number_of_episodes ?? 0,
+      vote_average: d.vote_average ?? 0,
       external_ids: d.external_ids,
     }
   }
@@ -358,6 +361,7 @@ export class TmdbClient {
       backdrop_path: d.backdrop_path ?? null,
       genres: d.genres ?? [],
       production_companies: d.production_companies ?? [],
+      vote_average: d.vote_average ?? 0,
       external_ids: d.external_ids,
     }
   }

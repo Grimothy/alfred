@@ -10,6 +10,9 @@ import {
   getDiscoveryCache,
   setDiscoveryCache,
   invalidateDiscoveryCache,
+  getTmdbItemDetail,
+  setTmdbItemDetail,
+  getTmdbItemDetailBatch,
 } from '../db/queries'
 import { getTmdbClient, TmdbMovie, TmdbTvShow } from '../tmdb/client'
 
@@ -43,6 +46,9 @@ export interface TmdbDiscoveryItem {
   poster_path: string | null
   release_date?: string   // movies
   first_air_date?: string // TV shows
+  // Enriched fields (fetched on demand, cached per-item)
+  genres?: string[]
+  vote_average?: number
 }
 
 export interface TmdbDiscoveryResult {
@@ -699,6 +705,64 @@ export async function previewTmdbCollection(
 }
 
 /**
+ * Enriches TMDB discovery items with full detail data (genres, vote_average).
+ * Reads from per-item cache (7-day TTL) and fetches missing items from TMDB
+ * in batches of 10 concurrent requests.
+ */
+async function enrichTmdbDiscoveryItems(
+  items: TmdbDiscoveryItem[],
+  tmdbApiKey: string
+): Promise<TmdbDiscoveryItem[]> {
+  if (items.length === 0) return items
+
+  const tmdb = getTmdbClient(tmdbApiKey)
+  const BATCH = 10
+
+  // Check cache for all items first
+  const cached = new Map<number, string>()
+  for (const type of ['movie', 'tv'] as const) {
+    const ids = items.filter((i) => i.type === type).map((i) => i.id)
+    const batchCached = getTmdbItemDetailBatch(ids, type)
+    batchCached.forEach((json, id) => cached.set(id, json))
+  }
+
+  const uncached = items.filter((i) => !cached.has(i.id))
+
+  // Fetch uncached items in concurrent batches
+  await Promise.allSettled(
+    uncached.map((item) =>
+      (item.type === 'movie'
+        ? tmdb.getMovieDetails(item.id)
+        : tmdb.getTvDetails(item.id)
+      ).then((detail) => {
+        const genres = detail.genres.map((g) => g.name)
+        const enriched = {
+          ...item,
+          genres,
+          vote_average: detail.vote_average,
+        }
+        setTmdbItemDetail(item.id, item.type, JSON.stringify(enriched))
+        return enriched
+      })
+    )
+  )
+
+  // Rebuild with full enriched data from cache or freshly fetched
+  return items.map((item) => {
+    const cachedJson = cached.get(item.id)
+    if (cachedJson) {
+      try {
+        return JSON.parse(cachedJson) as TmdbDiscoveryItem
+      } catch {
+        // corrupt cache — fall through to re-fetch
+      }
+    }
+    // If not in cache and fetch failed above, return original with empty enrichment
+    return { ...item, genres: item.genres ?? [], vote_average: item.vote_average ?? 0 }
+  })
+}
+
+/**
  * Preview a TMDB-backed collection for expanded view.
  *
  * - inCollection: Emby items currently in the Emby BoxSet (gold cards)
@@ -782,6 +846,10 @@ export async function previewTmdbCollectionExpanded(
       notInCollection.push(disc)
     }
   }
+
+  // Enrich notInCollection items with genres and vote_average (cached, batched)
+  notInCollection.length > 0 &&
+    (await enrichTmdbDiscoveryItems(notInCollection, tmdbApiKey))
 
   return { inCollection, notInCollection }
 }

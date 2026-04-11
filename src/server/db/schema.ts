@@ -67,6 +67,14 @@ export function initDb(): void {
       items_json    TEXT    NOT NULL,
       discovered_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
+
+    CREATE TABLE IF NOT EXISTS tmdb_item_details (
+      tmdb_id     INTEGER NOT NULL,
+      type        TEXT    NOT NULL,
+      details_json TEXT   NOT NULL,
+      fetched_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+      PRIMARY KEY (tmdb_id, type)
+    );
   `)
 
   // Migrations — ALTER TABLE ignores columns that already exist

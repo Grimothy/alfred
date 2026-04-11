@@ -250,6 +250,70 @@ export function invalidateDiscoveryCache(collectionId: number): void {
   db.prepare('DELETE FROM tmdb_discovery_cache WHERE collection_id = ?').run(collectionId)
 }
 
+// ── TMDB Item Detail Cache ────────────────────────────────────────────────────
+
+interface TmdbItemDetailRow {
+  tmdb_id: number
+  type: string
+  details_json: string
+  fetched_at: number
+}
+
+const ITEM_DETAIL_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
+
+export function getTmdbItemDetail(
+  tmdbId: number,
+  type: 'movie' | 'tv'
+): TmdbItemDetailRow | undefined {
+  const row = db
+    .prepare('SELECT * FROM tmdb_item_details WHERE tmdb_id = ? AND type = ?')
+    .get(tmdbId, type) as TmdbItemDetailRow | undefined
+
+  if (!row) return undefined
+
+  // Check TTL
+  const now = Math.floor(Date.now() / 1000)
+  if (now - row.fetched_at > ITEM_DETAIL_TTL) return undefined
+
+  return row
+}
+
+export function setTmdbItemDetail(
+  tmdbId: number,
+  type: 'movie' | 'tv',
+  detailsJson: string
+): void {
+  db.prepare(`
+    INSERT INTO tmdb_item_details (tmdb_id, type, details_json, fetched_at)
+    VALUES (?, ?, ?, unixepoch())
+    ON CONFLICT(tmdb_id, type) DO UPDATE SET
+      details_json = excluded.details_json,
+      fetched_at   = excluded.fetched_at
+  `).run(tmdbId, type, detailsJson)
+}
+
+export function getTmdbItemDetailBatch(
+  tmdbIds: number[],
+  type: 'movie' | 'tv'
+): Map<number, string> {
+  if (tmdbIds.length === 0) return new Map()
+  const now = Math.floor(Date.now() / 1000)
+  const placeholders = tmdbIds.map(() => '?').join(',')
+  const rows = db.prepare(`
+    SELECT tmdb_id, details_json, fetched_at
+    FROM tmdb_item_details
+    WHERE tmdb_id IN (${placeholders}) AND type = ?
+  `).all(...tmdbIds, type) as TmdbItemDetailRow[]
+
+  const result = new Map<number, string>()
+  for (const row of rows) {
+    if (now - row.fetched_at <= ITEM_DETAIL_TTL) {
+      result.set(row.tmdb_id, row.details_json)
+    }
+  }
+  return result
+}
+
 export function setCollectionImagePath(
   id: number,
   imageType: 'poster' | 'backdrop',
