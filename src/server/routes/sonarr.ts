@@ -201,7 +201,7 @@ router.post('/series', async (req, res) => {
       monitored: true,
       seasonFolder: true,
       addOptions: {
-        searchForMissingEpisodes: false,
+        searchForMissingEpisodes: true,
       },
     }
 

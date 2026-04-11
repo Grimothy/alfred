@@ -46,9 +46,9 @@
 - **Sonarr integration (series)**: "Request Full Series to Sonarr" button in hero; per-season "Request Missing" / "Request Season" buttons; bottom-right floating panel with quality profile + root folder selectors; success toast on completion; error display in panel
 - **Partial season request**: `seasonStatuses = [{ seasonNumber, monitored: true }]` — only that season monitored
 - **Full series request**: no `seasonStatuses` — all seasons monitored
-- `addOptions.searchForMissingEpisodes: false` — adds to wanted list, no auto-download
+- `addOptions.searchForMissingEpisodes: true` — triggers automatic search after adding
 - **Radarr integration (movies)**: "Request to Radarr" button in hero; floating panel with quality profile + root folder selectors; success toast; error display in panel
-- `addOptions.searchForMovie: false` — adds to wanted list, no auto-download
+- `addOptions.searchForMovie: true` — triggers automatic search after adding
 - Back navigation via `navigate(-1)`
   - TMDB items not yet in Emby: navigated via `?source=tmdb&tmdbId=X&type=Y&name=Z&year=W` params
   - **TMDB-only view**: when `source=tmdb` and item is not in Emby, fetches full TMDB detail via `GET /api/library/tmdb/:id?type=tv|movie`; renders backdrop, poster, overview, genres, Details (TMDB/TVDB/IMDB IDs, network, episodes), and season rows (all shown as ✗ missing since not in library)
@@ -134,7 +134,7 @@ Key types:
 - `GET /api/radarr/rootfolders` — list root folders
 - `GET /api/radarr/lookup?term=` — search movies by term
 - `GET /api/radarr/movie` — list all movies in Radarr
-- `POST /api/radarr/movie` — add movie; body: `{ tmdbId, qualityProfileId?, rootFolderPath? }`; `addOptions.searchForMovie: false`
+- `POST /api/radarr/movie` — add movie; body: `{ tmdbId, qualityProfileId?, rootFolderPath? }`; `addOptions.searchForMovie: true`
 
 ### Collections API additions
 - `PATCH /api/collections/:id/toggle-tmdb-matches` — toggles `include_tmdb_matches` (0|1); only valid when `use_tmdb=1`
