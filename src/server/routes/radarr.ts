@@ -180,7 +180,7 @@ router.post('/movie', async (req, res) => {
       rootFolderPath: body.rootFolderPath ?? '',
       monitored: true,
       addOptions: {
-        searchForMovie: false,
+        searchForMovie: true,
       },
     }
 
