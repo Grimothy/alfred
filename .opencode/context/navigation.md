@@ -27,9 +27,13 @@
 - Full-bleed backdrop hero (420px), gradient scrim
 - Poster thumbnail (130×195) overlapping hero bottom edge
 - Title, rule badges, item count, enabled toggle, "TMDB matches" toggle (TMDB-backed only), Edit/Remove actions in hero
+- **Filter/sort panel** above items grid: search input, type pills (All/Movie/Series), sort select (Name/Year/Rating), year range inputs, genre chips (dynamic from data), rating chips (dynamic from Emby OfficialRating values)
+  - Genre filter applies to both Emby items (by Genres[]) and TMDB items (by genres[] from enriched TMDB detail)
+  - Rating filter applies to Emby items only (OfficialRating field); TMDB items excluded since vote_average doesn't map cleanly to rating labels
+  - Year/type/search filters apply to both Emby and TMDB items
 - Items grid below (`auto-fill minmax(130px)`) with real Emby poster images
 - **Clicking any item card navigates to `/library/item/:id`** (Emby items) or `/library/item/:id?source=tmdb...` (TMDB matches)
-- When "TMDB matches" is enabled: two-section layout — "In collection" grid + "Not in collection — TMDB matches" grid (purple glow cards)
+- When "TMDB matches" is enabled: two-section layout — "In collection" grid + "Not in collection — TMDB matches" grid (purple glow cards); both filtered by the panel above
 - "← Collections" back button top-left
 - Opens `CollectionEditor` drawer for editing
 
@@ -81,13 +85,13 @@ Key functions and return types:
 
 Key types:
 - `Collection` — id, name, enabled (0|1), poster_path (abs FS path), backdrop_path (abs FS path), use_tmdb, include_tmdb_matches (0|1), rules: Rule[]
-- `EmbyItem` — Id, Name, Type, Studios, Genres, Tags?, ProductionYear?, Overview?, ProviderIds, ImageTags?, BackdropImageTags?, SeasonCount?, Seasons?[]
+- `EmbyItem` — Id, Name, Type, Studios, Genres, Tags?, ProductionYear?, OfficialRating?, CommunityRating?, Overview?, ProviderIds, ImageTags?, BackdropImageTags?, SeasonCount?, Seasons?[]
 - `EmbyItemDetail` — extends EmbyItem with full detail (Seasons for series)
 - `Rule` — field, value, content_type?, match_type?
-- `TmdbDiscoveryItem` — id, name, type: 'movie'|'tv', imdb_id, tvdb_id, poster_path, release_date?, first_air_date?
+- `TmdbDiscoveryItem` — id, name, type: 'movie'|'tv', imdb_id, tvdb_id, poster_path, release_date?, first_air_date?, genres?: string[], vote_average?: number
 - `ExpandedPreviewResponse` — count, inCollection: EmbyItem[], notInCollection: TmdbDiscoveryItem[]
-- `TmdbTvDetail` — id, name, overview, first_air_date, last_air_date, status, poster_path, backdrop_path, genres[], networks[], seasons: TmdbTvSeason[], number_of_seasons, number_of_episodes, external_ids (imdb_id, tvdb_id)
-- `TmdbMovieDetail` — id, title, overview, release_date, runtime, poster_path, backdrop_path, genres[], production_companies[], external_ids (imdb_id)
+- `TmdbTvDetail` — id, name, overview, first_air_date, last_air_date, status, poster_path, backdrop_path, genres[], networks[], seasons: TmdbTvSeason[], number_of_seasons, number_of_episodes, vote_average, external_ids (imdb_id, tvdb_id)
+- `TmdbMovieDetail` — id, title, overview, release_date, runtime, poster_path, backdrop_path, genres[], production_companies[], vote_average, external_ids (imdb_id)
 - `TmdbTvSeason` — season_number, episode_count, name, overview?, air_date?, poster_path?
 
 ## Image URL Patterns
@@ -137,7 +141,7 @@ Key types:
 - `GET /api/collections/:id/preview` — when `include_tmdb_matches=1`: returns `{ count, inCollection, notInCollection }`; use `?refresh=true` to bypass 72h TMDB discovery cache
 
 ### Library API additions
-- `GET /api/library/item/:id` — full Emby item detail including `Seasons[]` for series; fields: Studios, Genres, Tags, ProductionYear, ProviderIds, ImageTags, BackdropImageTags, Overview, SeasonCount, CumulativeRuntime
+- `GET /api/library/item/:id` — full Emby item detail including `Seasons[]` for series; fields: Studios, Genres, Tags, ProductionYear, OfficialRating, CommunityRating, ProviderIds, ImageTags, BackdropImageTags, Overview, SeasonCount, CumulativeRuntime, EpisodeRunTime
 - `GET /api/library/item/:id?tmdbId=X` — resolves Emby item by TMDB provider ID first; returns 404 `{ error: 'Item not in Emby library' }` if not found (client falls back to TMDB-only view)
 - `GET /api/library/tmdb/:id?type=movie|tv` — fetches full TMDB detail (overview, genres, seasons, networks, external IDs) for items not yet in Emby; requires `tmdb_api_key` in settings
 
@@ -145,8 +149,8 @@ Key types:
 
 | File | Purpose |
 |---|---|
-| `src/server/db/schema.ts` | `initDb()` — SQLite WAL init, idempotent; manages `collections`, `collection_rules`, `sync_history`, `tmdb_company_cache`, `tmdb_discovery_cache` tables |
-| `src/server/db/queries.ts` | All typed SQLite access — `getCollections`, `createCollection`, etc.; discovery cache: `getDiscoveryCache`, `setDiscoveryCache`, `invalidateDiscoveryCache` |
+| `src/server/db/schema.ts` | `initDb()` — SQLite WAL init, idempotent; manages `collections`, `collection_rules`, `sync_history`, `tmdb_company_cache`, `tmdb_discovery_cache`, `tmdb_item_details` tables |
+| `src/server/db/queries.ts` | All typed SQLite access — `getCollections`, `createCollection`, etc.; discovery cache: `getDiscoveryCache`, `setDiscoveryCache`, `invalidateDiscoveryCache`; item detail cache: `getTmdbItemDetail`, `setTmdbItemDetail`, `getTmdbItemDetailBatch` (7-day TTL, per-item) |
 | `src/server/emby/client.ts` | `EmbyClient` class + `getEmbyClient()` singleton |
 | `src/server/sync/engine.ts` | `runSync()`, `previewTmdbCollection*()`, `previewCollectionWithRules()`, `IMAGES_DIR` |
 | `src/server/sync/scheduler.ts` | node-cron wrapper |
