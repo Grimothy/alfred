@@ -848,8 +848,12 @@ export async function previewTmdbCollectionExpanded(
   }
 
   // Enrich notInCollection items with genres and vote_average (cached, batched)
-  notInCollection.length > 0 &&
-    (await enrichTmdbDiscoveryItems(notInCollection, tmdbApiKey))
+  if (notInCollection.length > 0) {
+    const enriched = await enrichTmdbDiscoveryItems(notInCollection, tmdbApiKey)
+    // Replace with enriched items (mutates the array in place for the return)
+    notInCollection.length = 0
+    notInCollection.push(...enriched)
+  }
 
   return { inCollection, notInCollection }
 }
