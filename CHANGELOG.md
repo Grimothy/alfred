@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.0](https://github.com/Grimothy/alfred/compare/alfred-v1.2.0...alfred-v1.3.0) (2026-04-12)
+
+
+### Features
+
+* custom collections — TMDB discover, item management, and filter persistence ([e57c86d](https://github.com/Grimothy/alfred/commit/e57c86d2032afb4350a44341666498c5dadfdf3d))
+* enrich TMDB items with genres and vote_average for filtering ([1599414](https://github.com/Grimothy/alfred/commit/15994143da00e80c7b650849e58e0e7228067637))
+* start search immediately when adding to Sonarr/Radarr ([63ff322](https://github.com/Grimothy/alfred/commit/63ff32248eea5304e7cabadf2b664939381df6fe))
+
+
+### Bug Fixes
+
+* capture enriched TmdbDiscoveryItem results — previous commit ignored return value so API never received genres/vote_average ([cb05a20](https://github.com/Grimothy/alfred/commit/cb05a20a3f3aaa949aa572d74bac2c9b65278652))
+* enable automatic search when adding movies to Radarr ([365fd8f](https://github.com/Grimothy/alfred/commit/365fd8fb70f1473666d871be972fbdf01583fc81))
+* hide TMDB items when genre/rating filters active (no data to match) ([4f17531](https://github.com/Grimothy/alfred/commit/4f17531c2a5086e724cdd43f36fbf8289bafe78e))
+* radarr error handler - parse Radarr's actual error response formats (string, array, message field) ([ce1e911](https://github.com/Grimothy/alfred/commit/ce1e9118283cbb1e913807a7a9f62eaf734bf9aa))
+* TMDB items no longer excluded by genre/rating filter checks ([7ec5b54](https://github.com/Grimothy/alfred/commit/7ec5b549877ccaa00205c868ff23261fbf227fe0))
+* TMDB not-in-collection items no longer hidden by genre/rating filters ([6ec01c5](https://github.com/Grimothy/alfred/commit/6ec01c5cbc77c1023e0862a386316719c02c63ca))
+
 ## [1.2.0](https://github.com/Grimothy/alfred/compare/alfred-v1.1.0...alfred-v1.2.0) (2026-04-10)
 
 
