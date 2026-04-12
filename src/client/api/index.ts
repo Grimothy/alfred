@@ -35,8 +35,10 @@ export interface Collection {
   tmdb_network_ids: string | null
   remove_from_emby: number
   include_tmdb_matches: number
+  type: 'emby' | 'tmdb' | 'custom'
   created_at: string
   rules: Rule[]
+  tmdb_discover_filters: string | null
 }
 
 export interface SyncStatus {
@@ -335,20 +337,22 @@ export const getCollections = () =>
 
 export const createCollection = (data: {
   name: string
-  rules: Rule[]
+  rules?: Rule[]
   use_tmdb?: number
   tmdb_company_id?: number | null
   tmdb_network_id?: number | null
   tmdb_company_ids?: TmdbIdEntry[]
   tmdb_network_ids?: TmdbIdEntry[]
   remove_from_emby?: number
+  type?: 'emby' | 'tmdb' | 'custom'
+  tmdb_discover_filters?: string | null
 }) => api.post<Collection>('/collections', data).then((r) => r.data)
 
 export const updateCollection = (
   id: number,
   data: {
     name: string
-    rules: Rule[]
+    rules?: Rule[]
     enabled?: boolean
     use_tmdb?: number
     tmdb_company_id?: number | null
@@ -356,6 +360,8 @@ export const updateCollection = (
     tmdb_company_ids?: TmdbIdEntry[]
     tmdb_network_ids?: TmdbIdEntry[]
     remove_from_emby?: number
+    type?: 'emby' | 'tmdb' | 'custom'
+    tmdb_discover_filters?: string | null
   }
 ) => api.put<Collection>(`/collections/${id}`, data).then((r) => r.data)
 
@@ -403,6 +409,7 @@ export interface TmdbDiscoveryItem {
   first_air_date?: string
   genres?: string[]
   vote_average?: number
+  year?: number | null
 }
 
 export interface ExpandedPreviewResponse {
@@ -424,6 +431,122 @@ export const previewCollectionRules = (
       rules,
     })
     .then((r) => r.data)
+
+// ── Custom Collection Items ─────────────────────────────────────────────────────
+
+export interface EmbySearchResult {
+  id: string
+  name: string
+  type: string
+  year: number | null
+  poster_path: string | null
+  backdrop_path: string | null
+}
+
+export interface TmdbSearchResult {
+  id: number
+  name: string
+  type: 'movie' | 'tv'
+  year: number | null
+  poster_path: string | null
+}
+
+export const searchCollectionItems = (q: string) =>
+  api
+    .get<{ emby: EmbySearchResult[]; tmdb: TmdbSearchResult[] }>('/collections/items/search', {
+      params: { q },
+    })
+    .then((r) => r.data)
+
+export interface CollectionItemsResponse {
+  emby: EmbyItem[]
+  tmdb: TmdbDiscoveryItem[]
+}
+
+export const getCollectionItems = (collectionId: number) =>
+  api
+    .get<CollectionItemsResponse>(`/collections/${collectionId}/items`)
+    .then((r) => r.data)
+
+export const addCollectionItem = (
+  collectionId: number,
+  itemId: string,
+  source: 'emby' | 'tmdb',
+  itemType?: 'movie' | 'series',
+  name?: string | null,
+  year?: string | null,
+  posterPath?: string | null
+) =>
+  api
+    .post(`/collections/${collectionId}/items`, { itemId, source, itemType, name, year, posterPath })
+    .then((r) => r.data)
+
+export const removeCollectionItem = (
+  collectionId: number,
+  itemId: string,
+  source: 'emby' | 'tmdb'
+) =>
+  api
+    .delete(`/collections/${collectionId}/items`, { data: { itemId, source } })
+    .then((r) => r.data)
+
+// ── TMDB Discover ──────────────────────────────────────────────────────────────
+
+export interface TmdbDiscoverFilters {
+  type: 'movie' | 'tv'
+  page?: number
+  sort_by?: string
+  'release_date.gte'?: string
+  'release_date.lte'?: string
+  'first_air_date.gte'?: string
+  'first_air_date.lte'?: string
+  with_companies?: string
+  with_genres?: string
+  with_keywords?: string
+  without_keywords?: string
+  with_original_language?: string
+  certification_country?: string
+  'certification.lte'?: string
+  'with_runtime.gte'?: string
+  'with_runtime.lte'?: string
+  'vote_average.gte'?: string
+  'vote_average.lte'?: string
+  'vote_count.gte'?: string
+  'vote_count.lte'?: string
+  watch_region?: string
+  with_watch_providers?: string
+}
+
+export interface TmdbDiscoverItem {
+  id: number
+  name: string
+  type: 'movie' | 'tv'
+  year: number | null
+  poster_path: string | null
+  vote_average: number
+  vote_count: number
+  overview?: string
+  genres?: number[]
+}
+
+export interface TmdbDiscoverResponse {
+  results: TmdbDiscoverItem[]
+  page: number
+  total_pages: number
+  total_results: number
+}
+
+export const discoverTmdb = (filters: TmdbDiscoverFilters) => {
+  const params = new URLSearchParams()
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.append(key, value.toString())
+    }
+  })
+  return api
+    .get<TmdbDiscoverResponse>(`/collections/tmdb/discover?${params}`)
+    .then((r) => r.data)
+}
 
 // ── Sync ──────────────────────────────────────────────────────────────────────
 

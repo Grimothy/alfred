@@ -79,6 +79,19 @@ export class EmbyClient {
     return items
   }
 
+  async searchItems(query: string, types: string[] = ['Movie', 'Series']): Promise<EmbyItem[]> {
+    const res = await this.http.get('/emby/Items', {
+      params: {
+        SearchTerm: query,
+        IncludeItemTypes: types.join(','),
+        Fields: 'Studios,Genres,Tags,ProductionYear,OfficialRating,CommunityRating,ProviderIds,ImageTags',
+        Recursive: true,
+        Limit: 20,
+      },
+    })
+    return res.data.Items ?? []
+  }
+
   // ── Studios ──────────────────────────────────────────────────────────────────
 
   async getStudios(): Promise<EmbyStudio[]> {

@@ -34,6 +34,7 @@
 - Items grid below (`auto-fill minmax(130px)`) with real Emby poster images
 - **Clicking any item card navigates to `/library/item/:id`** (Emby items) or `/library/item/:id?source=tmdb...` (TMDB matches)
 - When "TMDB matches" is enabled: two-section layout — "In collection" grid + "Not in collection — TMDB matches" grid (purple glow cards); both filtered by the panel above
+- **Custom collections (`type='custom'`)**: TMDB-only items with two-section layout — "In Emby" (gold cards) and "TMDB Only" (purple glow cards); TMDB items are NOT synced to Emby BoxSet (stored in Alfred for Sonarr/Radarr requests only); items removable via X button
 - "← Collections" back button top-left
 - Opens `CollectionEditor` drawer for editing
 
@@ -82,9 +83,13 @@ Key functions and return types:
 - `addRadarrMovie(opts)` → Radarr movie
 - `getSonarrQualityProfiles()`, `getSonarrRootFolders()`, `getSonarrSeries()`
 - `getRadarrQualityProfiles()`, `getRadarrRootFolders()`, `getRadarrMovies()`
+- `discoverTmdb(filters)` → `{ page, total_pages, total_results, results: TmdbDiscoverResult[] }` (TMDB discover for custom collections)
+- `getCollectionItems(id)` → `{ emby: EmbyItem[], tmdb: TmdbDiscoveryItem[] }` (custom collections)
+- `addCollectionItem(id, itemId, source, itemType?)` → void (custom collections)
+- `removeCollectionItem(id, itemId, source)` → void (custom collections)
 
 Key types:
-- `Collection` — id, name, enabled (0|1), poster_path (abs FS path), backdrop_path (abs FS path), use_tmdb, include_tmdb_matches (0|1), rules: Rule[]
+- `Collection` — id, name, enabled (0|1), poster_path (abs FS path), backdrop_path (abs FS path), use_tmdb, include_tmdb_matches (0|1), type: 'emby'|'tmdb'|'custom', rules: Rule[]
 - `EmbyItem` — Id, Name, Type, Studios, Genres, Tags?, ProductionYear?, OfficialRating?, CommunityRating?, Overview?, ProviderIds, ImageTags?, BackdropImageTags?, SeasonCount?, Seasons?[]
 - `EmbyItemDetail` — extends EmbyItem with full detail (Seasons for series)
 - `Rule` — field, value, content_type?, match_type?
@@ -93,6 +98,8 @@ Key types:
 - `TmdbTvDetail` — id, name, overview, first_air_date, last_air_date, status, poster_path, backdrop_path, genres[], networks[], seasons: TmdbTvSeason[], number_of_seasons, number_of_episodes, vote_average, external_ids (imdb_id, tvdb_id)
 - `TmdbMovieDetail` — id, title, overview, release_date, runtime, poster_path, backdrop_path, genres[], production_companies[], vote_average, external_ids (imdb_id)
 - `TmdbTvSeason` — season_number, episode_count, name, overview?, air_date?, poster_path?
+- `EmbySearchResult` — id, name, type, year, poster_path, backdrop_path
+- `TmdbSearchResult` — id, name, type: 'movie'|'tv', year, poster_path (used in TMDB company/network search)
 
 ## Image URL Patterns
 
@@ -139,6 +146,12 @@ Key types:
 ### Collections API additions
 - `PATCH /api/collections/:id/toggle-tmdb-matches` — toggles `include_tmdb_matches` (0|1); only valid when `use_tmdb=1`
 - `GET /api/collections/:id/preview` — when `include_tmdb_matches=1`: returns `{ count, inCollection, notInCollection }`; use `?refresh=true` to bypass 72h TMDB discovery cache
+- `GET /api/collections/tmdb/discover` — TMDB discover with filters for custom collections; params: `type` (movie|tv), `release_date.gte/lte`, `with_companies`, `with_genres`, `with_keywords`, `without_keywords`, `with_original_language`, `certification_country`, `certification.lte`, `with_runtime.gte/lte`, `vote_average.gte/lte`, `vote_count.gte/lte`, `watch_region`, `with_watch_providers`, `sort_by`, `page`
+- `POST /api/collections/:id/items` — add item to custom collection; body: `{ itemId, source: 'emby'|'tmdb', itemType?: 'movie'|'series' }`
+- `DELETE /api/collections/:id/items` — remove item from custom collection; body: `{ itemId, source: 'emby'|'tmdb' }`
+- `GET /api/collections/:id/items` — list items in custom collection; returns `{ emby: EmbyItem[], tmdb: TmdbDiscoveryItem[] }`
+- `POST /api/collections` — accepts `type: 'emby'|'tmdb'|'custom'`; custom collections don't require rules
+- `PUT /api/collections/:id` — accepts `type: 'emby'|'tmdb'|'custom'`; custom collections bypass rules validation
 
 ### Library API additions
 - `GET /api/library/item/:id` — full Emby item detail including `Seasons[]` for series; fields: Studios, Genres, Tags, ProductionYear, OfficialRating, CommunityRating, ProviderIds, ImageTags, BackdropImageTags, Overview, SeasonCount, CumulativeRuntime, EpisodeRunTime
@@ -149,10 +162,10 @@ Key types:
 
 | File | Purpose |
 |---|---|
-| `src/server/db/schema.ts` | `initDb()` — SQLite WAL init, idempotent; manages `collections`, `collection_rules`, `sync_history`, `tmdb_company_cache`, `tmdb_discovery_cache`, `tmdb_item_details` tables |
-| `src/server/db/queries.ts` | All typed SQLite access — `getCollections`, `createCollection`, etc.; discovery cache: `getDiscoveryCache`, `setDiscoveryCache`, `invalidateDiscoveryCache`; item detail cache: `getTmdbItemDetail`, `setTmdbItemDetail`, `getTmdbItemDetailBatch` (7-day TTL, per-item) |
+| `src/server/db/schema.ts` | `initDb()` — SQLite WAL init, idempotent; manages `collections`, `collection_rules`, `collection_items`, `sync_history`, `tmdb_company_cache`, `tmdb_discovery_cache`, `tmdb_item_details` tables |
+| `src/server/db/queries.ts` | All typed SQLite access — `getCollections`, `createCollection`, etc.; discovery cache: `getDiscoveryCache`, `setDiscoveryCache`, `invalidateDiscoveryCache`; item detail cache: `getTmdbItemDetail`, `setTmdbItemDetail`, `getTmdbItemDetailBatch` (7-day TTL, per-item); custom collections: `addCollectionItem`, `removeCollectionItem`, `getCollectionItems`, `clearCollectionItems` |
 | `src/server/emby/client.ts` | `EmbyClient` class + `getEmbyClient()` singleton |
-| `src/server/sync/engine.ts` | `runSync()`, `previewTmdbCollection*()`, `previewCollectionWithRules()`, `IMAGES_DIR` |
+| `src/server/sync/engine.ts` | `runSync()`, `previewTmdbCollection*()`, `previewCollectionWithRules()`, `syncCustomCollection()`, `IMAGES_DIR` |
 | `src/server/sync/scheduler.ts` | node-cron wrapper |
 
 ## Design Tokens (index.css)

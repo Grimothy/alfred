@@ -51,7 +51,9 @@ export interface CollectionRow {
   tmdb_network_ids: string | null
   remove_from_emby: number
   include_tmdb_matches: number
+  type: string
   created_at: string
+  tmdb_discover_filters: string | null
 }
 
 export interface RuleRow {
@@ -74,6 +76,18 @@ export interface RuleInput {
 
 export interface CollectionWithRules extends CollectionRow {
   rules: RuleRow[]
+}
+
+export interface CollectionItemRow {
+  id: number
+  collection_id: number
+  item_id: string
+  source: 'emby' | 'tmdb'
+  item_type: 'movie' | 'series' | null
+  added_at: number
+  name: string | null
+  year: string | null
+  poster_path: string | null
 }
 
 export function getCollections(): CollectionWithRules[] {
@@ -107,12 +121,14 @@ export function createCollection(
   tmdbNetworkId: number | null = null,
   tmdbCompanyIds: string | null = null,
   tmdbNetworkIds: string | null = null,
-  removeFromEmby = 1
+  removeFromEmby = 1,
+  type = 'emby',
+  tmdbDiscoverFilters: string | null = null
 ): CollectionWithRules {
   const tx = db.transaction(() => {
     const result = db
-      .prepare('INSERT INTO collections (name, use_tmdb, tmdb_company_id, tmdb_network_id, tmdb_company_ids, tmdb_network_ids, remove_from_emby) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(name, useTmdb, tmdbCompanyId, tmdbNetworkId, tmdbCompanyIds, tmdbNetworkIds, removeFromEmby)
+      .prepare('INSERT INTO collections (name, use_tmdb, tmdb_company_id, tmdb_network_id, tmdb_company_ids, tmdb_network_ids, remove_from_emby, type, tmdb_discover_filters) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(name, useTmdb, tmdbCompanyId, tmdbNetworkId, tmdbCompanyIds, tmdbNetworkIds, removeFromEmby, type, tmdbDiscoverFilters)
     const id = result.lastInsertRowid as number
     const stmt = db.prepare(
       'INSERT INTO collection_rules (collection_id, field, value, content_type, match_type, tags) VALUES (?, ?, ?, ?, ?, ?)'
@@ -144,7 +160,9 @@ export function updateCollection(
   tmdbCompanyIds?: string | null,
   tmdbNetworkIds?: string | null,
   removeFromEmby?: number,
-  includeTmdbMatches?: number
+  includeTmdbMatches?: number,
+  type?: string,
+  tmdbDiscoverFilters?: string | null
 ): CollectionWithRules | undefined {
   const tx = db.transaction(() => {
     const setParts = ['name = ?']
@@ -181,6 +199,14 @@ export function updateCollection(
     if (includeTmdbMatches !== undefined) {
       setParts.push('include_tmdb_matches = ?')
       values.push(includeTmdbMatches)
+    }
+    if (type !== undefined) {
+      setParts.push('type = ?')
+      values.push(type)
+    }
+    if (tmdbDiscoverFilters !== undefined) {
+      setParts.push('tmdb_discover_filters = ?')
+      values.push(tmdbDiscoverFilters)
     }
 
     values.push(id)
@@ -364,4 +390,52 @@ export function getLatestSync(): SyncHistoryRow | undefined {
   return db
     .prepare('SELECT * FROM sync_history ORDER BY started_at DESC LIMIT 1')
     .get() as SyncHistoryRow | undefined
+}
+
+// ── Collection Items ──────────────────────────────────────────────────────────
+
+export function addCollectionItem(
+  collectionId: number,
+  itemId: string,
+  source: 'emby' | 'tmdb',
+  itemType?: 'movie' | 'series',
+  name?: string | null,
+  year?: string | null,
+  posterPath?: string | null
+): void {
+  db.prepare(
+    'INSERT OR IGNORE INTO collection_items (collection_id, item_id, source, item_type, name, year, poster_path) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(collectionId, itemId, source, itemType ?? null, name ?? null, year ?? null, posterPath ?? null)
+}
+
+export function removeCollectionItem(
+  collectionId: number,
+  itemId: string,
+  source: 'emby' | 'tmdb'
+): void {
+  db.prepare(
+    'DELETE FROM collection_items WHERE collection_id = ? AND item_id = ? AND source = ?'
+  ).run(collectionId, itemId, source)
+}
+
+export function getCollectionItems(collectionId: number): CollectionItemRow[] {
+  return db
+    .prepare('SELECT * FROM collection_items WHERE collection_id = ? ORDER BY added_at DESC')
+    .all(collectionId) as CollectionItemRow[]
+}
+
+export function getCustomCollections(): CollectionWithRules[] {
+  const collections = db
+    .prepare('SELECT * FROM collections WHERE type = ? ORDER BY name')
+    .all('custom') as CollectionRow[]
+  const rules = db.prepare('SELECT * FROM collection_rules').all() as RuleRow[]
+
+  return collections.map((c) => ({
+    ...c,
+    rules: rules.filter((r) => r.collection_id === c.id),
+  }))
+}
+
+export function clearCollectionItems(collectionId: number): void {
+  db.prepare('DELETE FROM collection_items WHERE collection_id = ?').run(collectionId)
 }

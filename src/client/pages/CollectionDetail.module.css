@@ -230,6 +230,10 @@
   background: var(--border-subtle);
 }
 
+.sectionLabelPurple {
+  color: var(--accent-purple);
+}
+
 /* ── Not-in-collection section ─────────────────────────────── */
 .notInCollectionSection {
   margin-top: 48px;
@@ -260,6 +264,51 @@
   transform: translateY(-3px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   border-color: var(--border-accent);
+}
+
+/* Wrapper for removable cards (positions the remove button) */
+.itemCardWrapper {
+  position: relative;
+}
+
+.itemCardWrapper .itemCard {
+  width: 100%;
+  height: 100%;
+}
+
+.removeBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 10;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(15, 15, 20, 0.8);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.itemCardWrapper:hover .removeBtn {
+  opacity: 1;
+}
+
+.removeBtn:hover {
+  color: var(--accent-gold);
+  border-color: var(--accent-gold);
+}
+
+.removeBtnPurple:hover {
+  color: var(--accent-purple);
+  border-color: var(--accent-purple);
 }
 
 .itemCardGlow {

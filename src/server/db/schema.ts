@@ -75,7 +75,31 @@ export function initDb(): void {
       fetched_at  INTEGER NOT NULL DEFAULT (unixepoch()),
       PRIMARY KEY (tmdb_id, type)
     );
+
+    CREATE TABLE IF NOT EXISTS collection_items (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+      item_id       TEXT    NOT NULL,
+      source        TEXT    NOT NULL CHECK(source IN ('emby', 'tmdb')),
+      item_type     TEXT    CHECK(item_type IN ('movie', 'series')),
+      added_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(collection_id, item_id, source)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_collection_items_collection_source
+      ON collection_items(collection_id, source);
   `)
+
+  // Idempotent migration: add metadata columns to collection_items
+  try {
+    db.exec('ALTER TABLE collection_items ADD COLUMN name TEXT')
+  } catch { /* already exists */ }
+  try {
+    db.exec('ALTER TABLE collection_items ADD COLUMN year TEXT')
+  } catch { /* already exists */ }
+  try {
+    db.exec('ALTER TABLE collection_items ADD COLUMN poster_path TEXT')
+  } catch { /* already exists */ }
 
   // Migrations — ALTER TABLE ignores columns that already exist
   const migrations = [
@@ -91,6 +115,8 @@ export function initDb(): void {
     'ALTER TABLE collections ADD COLUMN tmdb_company_ids TEXT',
     'ALTER TABLE collections ADD COLUMN tmdb_network_ids TEXT',
     'ALTER TABLE collections ADD COLUMN include_tmdb_matches INTEGER DEFAULT 0',
+    'ALTER TABLE collections ADD COLUMN type TEXT DEFAULT "emby"',
+    'ALTER TABLE collections ADD COLUMN tmdb_discover_filters TEXT',
   ]
   for (const sql of migrations) {
     try { db.exec(sql) } catch { /* column already exists */ }

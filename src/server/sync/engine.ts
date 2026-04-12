@@ -13,6 +13,7 @@ import {
   getTmdbItemDetail,
   setTmdbItemDetail,
   getTmdbItemDetailBatch,
+  getCollectionItems,
 } from '../db/queries'
 import { getTmdbClient, TmdbMovie, TmdbTvShow } from '../tmdb/client'
 
@@ -65,6 +66,74 @@ export function isSyncRunning(): boolean {
   return syncRunning
 }
 
+// ── Custom collection sync ──────────────────────────────────────────────────────
+
+async function syncCustomCollection(
+  client: ReturnType<typeof getEmbyClient>,
+  collection: CollectionWithRules,
+  embyCollectionMap: Map<string, string>
+): Promise<CollectionSyncResult> {
+  try {
+    const customItems = getCollectionItems(collection.id)
+
+    // Filter to only Emby items (TMDB items are not synced to Emby)
+    const embyItems = customItems.filter((item) => item.source === 'emby')
+    const embyItemIds = embyItems.map((item) => item.item_id)
+
+    let embyCollectionId = embyCollectionMap.get(collection.name.toLowerCase())
+
+    // Verify the BoxSet still exists in Emby
+    if (embyCollectionId && !(await client.collectionExists(embyCollectionId))) {
+      embyCollectionId = undefined
+      embyCollectionMap.delete(collection.name.toLowerCase())
+    }
+
+    let added = 0
+    let removed = 0
+
+    if (!embyCollectionId) {
+      if (embyItemIds.length > 0) {
+        embyCollectionId = await client.createCollection(collection.name, embyItemIds)
+        added = embyItemIds.length
+        embyCollectionMap.set(collection.name.toLowerCase(), embyCollectionId)
+      }
+    } else {
+      // Additive sync: only add new Emby items, don't remove existing ones
+      const currentIds = await client.getCollectionItemIds(embyCollectionId)
+      const currentSet = new Set(currentIds)
+      const newIds = embyItemIds.filter((id) => !currentSet.has(id))
+
+      if (newIds.length > 0) {
+        await client.addToCollection(embyCollectionId, newIds)
+      }
+      added = newIds.length
+      removed = 0
+    }
+
+    if (embyCollectionId) {
+      await pushImages(client, embyCollectionId, collection)
+    }
+
+    return {
+      collectionId: embyCollectionId ?? '',
+      name: collection.name,
+      added,
+      removed,
+      total: embyItemIds.length,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return {
+      collectionId: '',
+      name: collection.name,
+      added: 0,
+      removed: 0,
+      total: 0,
+      error: message,
+    }
+  }
+}
+
 export async function runSync(): Promise<SyncSummary> {
   if (syncRunning) {
     throw new Error('Sync already in progress')
@@ -104,35 +173,39 @@ export async function runSync(): Promise<SyncSummary> {
 
     for (const collection of alfredCollections) {
       let result: CollectionSyncResult
-      const isTmdb = collection.use_tmdb === 1 &&
-        (collection.tmdb_company_id != null || collection.tmdb_network_id != null ||
-         collection.tmdb_company_ids != null || collection.tmdb_network_ids != null)
-      if (isTmdb) {
-        if (!tmdbApiKey) {
-          result = {
-            collectionId: '',
-            name: collection.name,
-            added: 0,
-            removed: 0,
-            total: 0,
-            error: 'TMDB API key not configured — skipping TMDB collection',
+
+      if (collection.type === 'custom') {
+        result = await syncCustomCollection(client, collection, embyCollectionMap)
+      } else {
+        const isTmdb =
+          collection.use_tmdb === 1 &&
+          (collection.tmdb_company_id != null ||
+            collection.tmdb_network_id != null ||
+            collection.tmdb_company_ids != null ||
+            collection.tmdb_network_ids != null)
+
+        if (isTmdb) {
+          if (!tmdbApiKey) {
+            result = {
+              collectionId: '',
+              name: collection.name,
+              added: 0,
+              removed: 0,
+              total: 0,
+              error: 'TMDB API key not configured — skipping TMDB collection',
+            }
+          } else {
+            result = await syncTmdbCollection(
+              client,
+              collection,
+              allItems,
+              embyCollectionMap,
+              tmdbApiKey
+            )
           }
         } else {
-          result = await syncTmdbCollection(
-            client,
-            collection,
-            allItems,
-            embyCollectionMap,
-            tmdbApiKey
-          )
+          result = await syncCollection(client, collection, allItems, embyCollectionMap)
         }
-      } else {
-        result = await syncCollection(
-          client,
-          collection,
-          allItems,
-          embyCollectionMap
-        )
       }
       results.push(result)
     }

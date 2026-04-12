@@ -7,6 +7,8 @@ import {
   toggleCollection,
   toggleTmdbMatches,
   previewCollectionById,
+  getCollectionItems,
+  removeCollectionItem,
   Collection,
   EmbyItem,
   TmdbDiscoveryItem,
@@ -65,11 +67,124 @@ function ItemCard({ item, navigate }: { item: EmbyItem; navigate: ReturnType<typ
   )
 }
 
+// ── Removable Emby item card (for custom collections) ─────────────────────────
+
+function RemovableEmbyCard({
+  item,
+  collectionId,
+  navigate,
+  onRemove,
+}: {
+  item: EmbyItem
+  collectionId: number
+  navigate: ReturnType<typeof useNavigate>
+  onRemove: () => void
+}) {
+  const posterUrl = itemPosterUrl(item)
+
+  return (
+    <div className={styles.itemCardWrapper}>
+      <div
+        className={styles.itemCard}
+        style={{ cursor: 'pointer' }}
+        onClick={() => navigate(`/library/item/${item.Id}`)}
+      >
+        {posterUrl ? (
+          <img src={posterUrl} alt={item.Name} className={styles.itemPosterImg} />
+        ) : (
+          <div className={styles.itemMonogram}>{item.Name.charAt(0).toUpperCase()}</div>
+        )}
+        <div className={styles.itemScrim}>
+          <span className={styles.itemName}>{item.Name}</span>
+          <span className={styles.itemType}>{item.Type}</span>
+          {item.ProductionYear && (
+            <span className={styles.itemYear}>{item.ProductionYear}</span>
+          )}
+        </div>
+      </div>
+      <button
+        className={styles.removeBtn}
+        onClick={(e) => {
+          e.stopPropagation()
+          onRemove()
+        }}
+        title="Remove from collection"
+      >
+        ×
+      </button>
+    </div>
+  )
+}
+
+// ── Removable TMDB item card (for custom collections) ─────────────────────────
+
+function RemovableTmdbCard({
+  item,
+  collectionId,
+  navigate,
+  onRemove,
+}: {
+  item: TmdbDiscoveryItem
+  collectionId: number
+  navigate: ReturnType<typeof useNavigate>
+  onRemove: () => void
+}) {
+  const posterUrl = tmdbPosterUrl(item.poster_path)
+  const year =
+    (item.type === 'movie' ? item.release_date?.slice(0, 4) : item.first_air_date?.slice(0, 4))
+    ?? (item.year ? String(item.year) : undefined)
+
+  function handleClick() {
+    const params = new URLSearchParams({
+      source: 'tmdb',
+      tmdbId: String(item.id),
+      type: item.type,
+      name: item.name,
+      ...(year ? { year } : {}),
+      ...(item.poster_path ? { poster: item.poster_path } : {}),
+    })
+    navigate(`/library/item/${item.id}?${params.toString()}`)
+  }
+
+  return (
+    <div className={styles.itemCardWrapper}>
+      <div
+        className={`${styles.itemCard} ${styles.itemCardGlow}`}
+        style={{ cursor: 'pointer' }}
+        onClick={handleClick}
+      >
+        {posterUrl ? (
+          <img src={posterUrl} alt={item.name} className={styles.itemPosterImg} />
+        ) : (
+          <div className={styles.itemMonogram}>{item.name.charAt(0).toUpperCase()}</div>
+        )}
+        <div className={styles.itemScrim}>
+          <span className={styles.itemName}>{item.name}</span>
+          <span className={styles.itemType}>{item.type === 'movie' ? 'Movie' : 'Series'}</span>
+          {year && <span className={styles.itemYear}>{year}</span>}
+        </div>
+      </div>
+      <button
+        className={`${styles.removeBtn} ${styles.removeBtnPurple}`}
+        onClick={(e) => {
+          e.stopPropagation()
+          onRemove()
+        }}
+        title="Remove from collection"
+      >
+        ×
+      </button>
+    </div>
+  )
+}
+
 // ── TMDB match card (purple glow) ─────────────────────────────────────────────
 
 function TmdbMatchCard({ item, navigate }: { item: TmdbDiscoveryItem; navigate: ReturnType<typeof useNavigate> }) {
   const posterUrl = tmdbPosterUrl(item.poster_path)
-  const year = item.type === 'movie' ? item.release_date?.slice(0, 4) : item.first_air_date?.slice(0, 4)
+  const year =
+    (item.type === 'movie' ? item.release_date?.slice(0, 4) : item.first_air_date?.slice(0, 4))
+    ?? (item.year ? String(item.year) : undefined)
 
   function handleClick() {
     const params = new URLSearchParams({
@@ -277,6 +392,141 @@ function ExpandedOrStandardView({
   return <div className={styles.stateMsg}>No items in this collection yet.</div>
 }
 
+// ── Custom collection view ─────────────────────────────────────────────────────
+
+interface CustomCollectionViewProps {
+  collectionId: number
+  embyItems: EmbyItem[]
+  tmdbItems: TmdbDiscoveryItem[]
+  filters: FilterState
+  navigate: ReturnType<typeof useNavigate>
+  onRemoveEmby: (itemId: string) => void
+  onRemoveTmdb: (itemId: number) => void
+}
+
+function CustomCollectionView({
+  collectionId,
+  embyItems,
+  tmdbItems,
+  filters,
+  navigate,
+  onRemoveEmby,
+  onRemoveTmdb,
+}: CustomCollectionViewProps) {
+  // Apply filters to Emby items
+  const filteredEmby = embyItems.filter((item) => {
+    if (filters.search && !item.Name.toLowerCase().includes(filters.search.toLowerCase())) return false
+    if (filters.type !== 'all' && item.Type !== filters.type) return false
+    if (filters.genres.length > 0 && !filters.genres.some((g) => item.Genres?.includes(g))) return false
+    if (filters.ratings.length > 0) {
+      const r = item.OfficialRating ?? ''
+      if (!filters.ratings.includes(r)) return false
+    }
+    const year = item.ProductionYear
+    if (filters.yearFrom && year && year < parseInt(filters.yearFrom)) return false
+    if (filters.yearTo && year && year > parseInt(filters.yearTo)) return false
+    return true
+  })
+
+  // Apply filters to TMDB items
+  const filteredTmdb = tmdbItems.filter((item) => {
+    if (filters.search && !item.name.toLowerCase().includes(filters.search.toLowerCase())) return false
+    if (filters.type !== 'all') {
+      const tmdbType = item.type === 'movie' ? 'Movie' : 'Series'
+      if (tmdbType !== filters.type) return false
+    }
+    const rawYear = item.type === 'movie' ? item.release_date : item.first_air_date
+    const year = rawYear ? parseInt(rawYear.slice(0, 4)) : item.year ?? undefined
+    if (filters.yearFrom && year && year < parseInt(filters.yearFrom)) return false
+    if (filters.yearTo && year && year > parseInt(filters.yearTo)) return false
+    if (filters.genres.length > 0) {
+      const itemGenres = item.genres ?? []
+      if (!filters.genres.some((g) => itemGenres.includes(g))) return false
+    }
+    return true
+  })
+
+  // Year helper for stored TMDB items
+  function storedYear(item: TmdbDiscoveryItem): number | undefined {
+    if (item.year) return item.year
+    if (item.type === 'movie' && item.release_date) return parseInt(item.release_date.slice(0, 4))
+    if (item.first_air_date) return parseInt(item.first_air_date.slice(0, 4))
+    return undefined
+  }
+
+  // Sort Emby items
+  const sortedEmby = [...filteredEmby].sort((a, b) => {
+    switch (filters.sort) {
+      case 'name-desc': return b.Name.localeCompare(a.Name)
+      case 'year-desc': return (b.ProductionYear ?? 0) - (a.ProductionYear ?? 0)
+      case 'year-asc': return (a.ProductionYear ?? 0) - (b.ProductionYear ?? 0)
+      case 'rating-asc': return (a.CommunityRating ?? 0) - (b.CommunityRating ?? 0)
+      case 'rating-desc': return (b.CommunityRating ?? 0) - (a.CommunityRating ?? 0)
+      default: return a.Name.localeCompare(b.Name)
+    }
+  })
+
+  // Sort TMDB items
+  const sortedTmdb = [...filteredTmdb].sort((a, b) => {
+    switch (filters.sort) {
+      case 'name-desc': return b.name.localeCompare(a.name)
+      case 'year-desc': return (storedYear(b) ?? 0) - (storedYear(a) ?? 0)
+      case 'year-asc': return (storedYear(a) ?? 0) - (storedYear(b) ?? 0)
+      default: return a.name.localeCompare(b.name)
+    }
+  })
+
+  const totalEmby = embyItems.length
+  const totalTmdb = tmdbItems.length
+  const filtered = isFiltered(filters)
+
+  if (sortedEmby.length === 0 && sortedTmdb.length === 0) {
+    return <div className={styles.stateMsg}>No items in this collection yet.</div>
+  }
+
+  return (
+    <>
+      {sortedEmby.length > 0 && (
+        <>
+          <p className={styles.sectionLabel}>
+            In Emby ({filtered ? `${sortedEmby.length} of ${totalEmby}` : sortedEmby.length})
+          </p>
+          <div className={styles.itemGrid}>
+            {sortedEmby.map((item: EmbyItem) => (
+              <RemovableEmbyCard
+                key={item.Id}
+                item={item}
+                collectionId={collectionId}
+                navigate={navigate}
+                onRemove={() => onRemoveEmby(item.Id)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {sortedTmdb.length > 0 && (
+        <div className={styles.notInCollectionSection}>
+          <p className={`${styles.sectionLabel} ${styles.sectionLabelPurple}`}>
+            TMDB Only ({filtered ? `${sortedTmdb.length} of ${totalTmdb}` : sortedTmdb.length})
+          </p>
+          <div className={styles.itemGrid}>
+            {sortedTmdb.map((item) => (
+              <RemovableTmdbCard
+                key={`tmdb-${item.id}`}
+                item={item}
+                collectionId={collectionId}
+                navigate={navigate}
+                onRemove={() => onRemoveTmdb(item.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 // ── Filter panel ──────────────────────────────────────────────────────────────
 
 function FilterPanel({
@@ -463,10 +713,21 @@ export default function CollectionDetail() {
 
   const collection: Collection | undefined = collections.find((c) => c.id === collectionId)
 
+  // Determine if this is a custom collection
+  const isCustomCollection = collection?.type === 'custom'
+
+  // Standard query for rule-based and TMDB collections
   const { data: viewItems, isLoading: itemsLoading } = useQuery({
     queryKey: ['collection-view', collectionId, collection?.use_tmdb ?? 0, collection?.include_tmdb_matches ?? 0],
     queryFn: () => previewCollectionById(collectionId),
-    enabled: !isNaN(collectionId),
+    enabled: !isNaN(collectionId) && !isCustomCollection,
+  })
+
+  // Custom collection items query
+  const { data: customItems, isLoading: customItemsLoading } = useQuery({
+    queryKey: ['collection-items', collectionId],
+    queryFn: () => getCollectionItems(collectionId),
+    enabled: !isNaN(collectionId) && isCustomCollection,
   })
 
   const toggleMutation = useMutation({
@@ -487,6 +748,16 @@ export default function CollectionDetail() {
       qc.invalidateQueries({ queryKey: ['collections'] })
       navigate('/collections')
     },
+  })
+
+  const removeEmbyMutation = useMutation({
+    mutationFn: (itemId: string) => removeCollectionItem(collectionId, itemId, 'emby'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['collection-items'] }),
+  })
+
+  const removeTmdbMutation = useMutation({
+    mutationFn: (itemId: number) => removeCollectionItem(collectionId, String(itemId), 'tmdb'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['collection-items'] }),
   })
 
   function confirmDelete() {
@@ -635,7 +906,29 @@ export default function CollectionDetail() {
 
       {/* ── Items grid ──────────────────────────────────────────────────────── */}
       <div className={styles.body}>
-        {itemsLoading ? (
+        {isCustomCollection ? (
+          customItemsLoading ? (
+            <div className={styles.stateMsg}>Loading items…</div>
+          ) : (
+            <>
+              <FilterPanel
+                viewItems={null}
+                filters={filters}
+                onChange={patchFilters}
+                onClear={() => setFilters(DEFAULT_FILTERS)}
+              />
+              <CustomCollectionView
+                collectionId={collectionId}
+                embyItems={customItems?.emby ?? []}
+                tmdbItems={customItems?.tmdb ?? []}
+                filters={filters}
+                navigate={navigate}
+                onRemoveEmby={(itemId) => removeEmbyMutation.mutate(itemId)}
+                onRemoveTmdb={(itemId) => removeTmdbMutation.mutate(itemId)}
+              />
+            </>
+          )
+        ) : itemsLoading ? (
           <div className={styles.stateMsg}>Loading items…</div>
         ) : (
           <>
