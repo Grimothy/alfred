@@ -117,8 +117,12 @@ export interface Settings {
   tmdb_api_key: string
   sonarr_url: string
   sonarr_api_key: string
+  sonarr_quality_profile: string
+  sonarr_root_folder: string
   radarr_url: string
   radarr_api_key: string
+  radarr_quality_profile: string
+  radarr_root_folder: string
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -249,6 +253,24 @@ export interface AddSonarrSeriesOptions {
 export const addSonarrSeries = (payload: AddSonarrSeriesOptions) =>
   api.post<SonarrSeriesItem>('/sonarr/series', payload).then((r) => r.data)
 
+export interface SonarrBatchItem {
+  tvdbId: number
+  title?: string
+  titleSlug?: string
+  seasonStatuses?: { seasonNumber: number; monitored: boolean }[]
+}
+
+export interface SonarrBatchResult {
+  results: { tvdbId: number; success: boolean; error?: string }[]
+}
+
+export const requestSonarrBatch = (payload: {
+  items: SonarrBatchItem[]
+  qualityProfileId?: number
+  rootFolderPath?: string
+}) =>
+  api.post<SonarrBatchResult>('/sonarr/request-batch', payload).then((r) => r.data)
+
 // ── Radarr types ───────────────────────────────────────────────────────────────
 
 export interface RadarrQualityProfile {
@@ -269,6 +291,7 @@ export interface RadarrMovieItem {
   year?: number
   status: string
   monitored: boolean
+  hasFile: boolean
 }
 
 export interface RadarrLookupResult {
@@ -305,6 +328,67 @@ export interface AddRadarrMovieOptions {
 
 export const addRadarrMovie = (payload: AddRadarrMovieOptions) =>
   api.post<RadarrMovieItem>('/radarr/movie', payload).then((r) => r.data)
+
+export interface RadarrBatchItem {
+  tmdbId: number
+}
+
+export interface RadarrBatchResult {
+  results: { tmdbId: number; success: boolean; error?: string }[]
+}
+
+export const requestRadarrBatch = (payload: {
+  items: RadarrBatchItem[]
+  qualityProfileId?: number
+  rootFolderPath?: string
+}) =>
+  api.post<RadarrBatchResult>('/radarr/request-batch', payload).then((r) => r.data)
+
+export interface RetryMissingResult {
+  results: { tmdbId: number; success: boolean; error?: string }[]
+}
+
+export const retryRadarrMissing = (payload: {
+  items: { tmdbId: number }[]
+  qualityProfileId?: number
+}) =>
+  api.post<RetryMissingResult>('/radarr/retry-missing', payload).then((r) => r.data)
+
+// ── Queue polling ───────────────────────────────────────────────────────────────
+
+export interface SonarrQueueRecord {
+  id: number
+  title: string
+  status: string
+  progress: number // 0-1
+  timeleft: string | null
+  downloadId: string
+  tvdbId: number | null
+}
+
+export interface SonarrQueueResponse {
+  records: SonarrQueueRecord[]
+}
+
+export const getSonarrQueue = () =>
+  api.get<SonarrQueueResponse>('/sonarr/queue').then((r) => r.data)
+
+export interface RadarrQueueRecord {
+  id: number
+  title: string
+  status: string
+  progress: number // 0-1
+  timeleft: string | null
+  downloadId: string
+  tmdbId: number | null
+}
+
+export interface RadarrQueueResponse {
+  records: RadarrQueueRecord[]
+}
+
+export const getRadarrQueue = () =>
+  api.get<RadarrQueueResponse>('/radarr/queue').then((r) => r.data)
 
 export interface TmdbCompanyResult {
   id: number

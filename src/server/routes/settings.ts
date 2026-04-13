@@ -27,7 +27,7 @@ router.get('/', (_req, res) => {
 
 router.put('/', (req, res) => {
   const body: Record<string, string> = req.body
-  const allowed = ['emby_host', 'emby_api_key', 'sync_schedule', 'sync_enabled', 'tmdb_api_key', 'sonarr_url', 'sonarr_api_key', 'radarr_url', 'radarr_api_key']
+  const allowed = ['emby_host', 'emby_api_key', 'sync_schedule', 'sync_enabled', 'tmdb_api_key', 'sonarr_url', 'sonarr_api_key', 'sonarr_quality_profile', 'sonarr_root_folder', 'radarr_url', 'radarr_api_key', 'radarr_quality_profile', 'radarr_root_folder']
   const update: Record<string, string> = {}
 
   for (const key of allowed) {

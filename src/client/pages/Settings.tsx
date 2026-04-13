@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSettings, updateSettings, testConnection, testTmdbConnection, refreshTmdbCache, testSonarrConnection, testRadarrConnection } from '../api'
+import { getSettings, updateSettings, testConnection, testTmdbConnection, refreshTmdbCache, testSonarrConnection, testRadarrConnection, getSonarrQualityProfiles, getSonarrRootFolders, getRadarrQualityProfiles, getRadarrRootFolders } from '../api'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import styles from './Settings.module.css'
@@ -73,6 +73,18 @@ export default function Settings() {
   } | null>(null)
   const [radarrTestLoading, setRadarrTestLoading] = useState(false)
 
+  // Sonarr quality profiles & root folders
+  const [sonarrQualityProfiles, setSonarrQualityProfiles] = useState<{ id: number; name: string }[]>([])
+  const [sonarrRootFolders, setSonarrRootFolders] = useState<{ id: number; path: string }[]>([])
+  const [sonarrQualityProfile, setSonarrQualityProfile] = useState('')
+  const [sonarrRootFolder, setSonarrRootFolder] = useState('')
+
+  // Radarr quality profiles & root folders
+  const [radarrQualityProfiles, setRadarrQualityProfiles] = useState<{ id: number; name: string }[]>([])
+  const [radarrRootFolders, setRadarrRootFolders] = useState<{ id: number; path: string }[]>([])
+  const [radarrQualityProfile, setRadarrQualityProfile] = useState('')
+  const [radarrRootFolder, setRadarrRootFolder] = useState('')
+
   useEffect(() => {
     if (settings) {
       setHost(settings.emby_host ?? '')
@@ -82,8 +94,12 @@ export default function Settings() {
       setSyncEnabled(settings.sync_enabled === 'true')
       setSonarrUrl(settings.sonarr_url ?? '')
       setSonarrApiKey(settings.sonarr_api_key ?? '')
+      setSonarrQualityProfile(settings.sonarr_quality_profile ?? '')
+      setSonarrRootFolder(settings.sonarr_root_folder ?? '')
       setRadarrUrl(settings.radarr_url ?? '')
       setRadarrApiKey(settings.radarr_api_key ?? '')
+      setRadarrQualityProfile(settings.radarr_quality_profile ?? '')
+      setRadarrRootFolder(settings.radarr_root_folder ?? '')
 
       const presetIndex = SCHEDULE_PRESETS.findIndex((p) => p.value === settings.sync_schedule)
       setSchedulePreset(presetIndex >= 0 ? presetIndex : CUSTOM_INDEX)
@@ -149,6 +165,18 @@ export default function Settings() {
     if (radarrApiKey && radarrApiKey !== '••••••••') {
       update['radarr_api_key'] = radarrApiKey
     }
+    if (sonarrQualityProfile) {
+      update['sonarr_quality_profile'] = sonarrQualityProfile
+    }
+    if (sonarrRootFolder) {
+      update['sonarr_root_folder'] = sonarrRootFolder
+    }
+    if (radarrQualityProfile) {
+      update['radarr_quality_profile'] = radarrQualityProfile
+    }
+    if (radarrRootFolder) {
+      update['radarr_root_folder'] = radarrRootFolder
+    }
     saveMutation.mutate(update)
   }
 
@@ -191,6 +219,13 @@ export default function Settings() {
       const result = await testSonarrConnection(sonarrUrl, sonarrApiKey)
       if (result.ok) {
         setSonarrTestResult({ ok: true, message: `Connected to Sonarr (v${result.version})` })
+        // Fetch available quality profiles and root folders
+        const [profiles, folders] = await Promise.all([
+          getSonarrQualityProfiles(),
+          getSonarrRootFolders(),
+        ])
+        setSonarrQualityProfiles(profiles)
+        setSonarrRootFolders(folders)
       } else {
         setSonarrTestResult({ ok: false, message: result.error ?? 'Connection failed' })
       }
@@ -211,6 +246,13 @@ export default function Settings() {
       const result = await testRadarrConnection(radarrUrl, radarrApiKey)
       if (result.ok) {
         setRadarrTestResult({ ok: true, message: `Connected to Radarr (v${result.version})` })
+        // Fetch available quality profiles and root folders
+        const [profiles, folders] = await Promise.all([
+          getRadarrQualityProfiles(),
+          getRadarrRootFolders(),
+        ])
+        setRadarrQualityProfiles(profiles)
+        setRadarrRootFolders(folders)
       } else {
         setRadarrTestResult({ ok: false, message: result.error ?? 'Connection failed' })
       }
@@ -418,6 +460,44 @@ export default function Settings() {
               </span>
             )}
           </div>
+
+          {sonarrQualityProfiles.length > 0 && (
+            <div className={styles.field}>
+              <label className={styles.label}>Default Quality Profile</label>
+              <select
+                className={styles.select}
+                value={sonarrQualityProfile}
+                onChange={(e) => setSonarrQualityProfile(e.target.value)}
+              >
+                <option value="">— Select —</option>
+                {sonarrQualityProfiles.map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <p className={styles.hint}>Default profile for new series added via Alfred.</p>
+            </div>
+          )}
+
+          {sonarrRootFolders.length > 0 && (
+            <div className={styles.field}>
+              <label className={styles.label}>Default Library Folder</label>
+              <select
+                className={styles.select}
+                value={sonarrRootFolder}
+                onChange={(e) => setSonarrRootFolder(e.target.value)}
+              >
+                <option value="">— Select —</option>
+                {sonarrRootFolders.map((f) => (
+                  <option key={f.id} value={f.path}>
+                    {f.path}
+                  </option>
+                ))}
+              </select>
+              <p className={styles.hint}>Default folder for new series added via Alfred.</p>
+            </div>
+          )}
         </Card>
 
         <Card className={styles.section}>
@@ -479,6 +559,44 @@ export default function Settings() {
               </span>
             )}
           </div>
+
+          {radarrQualityProfiles.length > 0 && (
+            <div className={styles.field}>
+              <label className={styles.label}>Default Quality Profile</label>
+              <select
+                className={styles.select}
+                value={radarrQualityProfile}
+                onChange={(e) => setRadarrQualityProfile(e.target.value)}
+              >
+                <option value="">— Select —</option>
+                {radarrQualityProfiles.map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <p className={styles.hint}>Default profile for new movies added via Alfred.</p>
+            </div>
+          )}
+
+          {radarrRootFolders.length > 0 && (
+            <div className={styles.field}>
+              <label className={styles.label}>Default Library Folder</label>
+              <select
+                className={styles.select}
+                value={radarrRootFolder}
+                onChange={(e) => setRadarrRootFolder(e.target.value)}
+              >
+                <option value="">— Select —</option>
+                {radarrRootFolders.map((f) => (
+                  <option key={f.id} value={f.path}>
+                    {f.path}
+                  </option>
+                ))}
+              </select>
+              <p className={styles.hint}>Default folder for new movies added via Alfred.</p>
+            </div>
+          )}
         </Card>
 
         <Card className={styles.section}>
