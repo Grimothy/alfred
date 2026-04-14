@@ -15,6 +15,7 @@ import {
   getTmdbItemDetailBatch,
   getCollectionItems,
   updateCollectionItem,
+  removeCollectionItem,
   getSetting,
 } from '../db/queries'
 import { getTmdbClient, TmdbMovie, TmdbTvShow } from '../tmdb/client'
@@ -73,19 +74,20 @@ export function isSyncRunning(): boolean {
 async function syncCustomCollection(
   client: ReturnType<typeof getEmbyClient>,
   collection: CollectionWithRules,
+  allItems: EmbyItem[],
   embyCollectionMap: Map<string, string>
 ): Promise<CollectionSyncResult> {
   try {
     const customItems = getCollectionItems(collection.id)
 
-    // First, migrate TMDB items that exist in Emby to 'emby' source
+    // Pass 1: Migrate TMDB items that now exist in Emby to 'emby' source
     const tmdbItems = customItems.filter((item) => item.source === 'tmdb')
     for (const tmdbItem of tmdbItems) {
       try {
         const embyItem = await client.getItemByTmdbId(tmdbItem.item_id)
         if (embyItem) {
-          // Item exists in Emby — migrate it to 'emby' source
-          updateCollectionItem(collection.id, tmdbItem.item_id, 'tmdb', embyItem.Id, 'emby')
+          // Preserve tmdb_id so we can revert later if the item is removed from Emby
+          updateCollectionItem(collection.id, tmdbItem.item_id, 'tmdb', embyItem.Id, 'emby', parseInt(tmdbItem.item_id))
         }
       } catch {
         // Not found in Emby — keep as TMDB item
@@ -94,8 +96,28 @@ async function syncCustomCollection(
 
     // Refresh items after migration
     const updatedItems = getCollectionItems(collection.id)
+
+    // Pass 2: Revert Emby items that no longer exist in the Emby library
+    // If the item has a tmdb_id, it goes back to source='tmdb' so it stays in the collection
     const embyItems = updatedItems.filter((item) => item.source === 'emby')
-    const embyItemIds = [...new Set(embyItems.map((item) => item.item_id))] // deduplicate
+    const embyItemIds = new Set(allItems.map((i) => i.Id))
+
+    for (const embyItem of embyItems) {
+      if (!embyItemIds.has(embyItem.item_id)) {
+        if (embyItem.tmdb_id != null) {
+          // Item was originally from TMDB — revert to TMDB source
+          updateCollectionItem(collection.id, embyItem.item_id, 'emby', String(embyItem.tmdb_id), 'tmdb')
+        } else {
+          // No TMDB fallback — remove from collection entirely
+          removeCollectionItem(collection.id, embyItem.item_id, 'emby')
+        }
+      }
+    }
+
+    // Refresh items after reversion
+    const finalItems = getCollectionItems(collection.id)
+    const finalEmbyItems = finalItems.filter((item) => item.source === 'emby')
+    const finalEmbyItemIds = [...new Set(finalEmbyItems.map((item) => item.item_id))] // deduplicate
 
     let embyCollectionId = embyCollectionMap.get(collection.name.toLowerCase())
 
@@ -109,16 +131,16 @@ async function syncCustomCollection(
     let removed = 0
 
     if (!embyCollectionId) {
-      if (embyItemIds.length > 0) {
-        embyCollectionId = await client.createCollection(collection.name, embyItemIds)
-        added = embyItemIds.length
+      if (finalEmbyItemIds.length > 0) {
+        embyCollectionId = await client.createCollection(collection.name, finalEmbyItemIds)
+        added = finalEmbyItemIds.length
         embyCollectionMap.set(collection.name.toLowerCase(), embyCollectionId)
       }
     } else {
       // Additive sync: only add new Emby items, don't remove existing ones
       const currentIds = await client.getCollectionItemIds(embyCollectionId)
       const currentSet = new Set(currentIds)
-      const newIds = embyItemIds.filter((id) => !currentSet.has(id))
+      const newIds = finalEmbyItemIds.filter((id) => !currentSet.has(id))
 
       if (newIds.length > 0) {
         await client.addToCollection(embyCollectionId, newIds)
@@ -136,7 +158,7 @@ async function syncCustomCollection(
       name: collection.name,
       added,
       removed,
-      total: embyItemIds.length,
+      total: finalEmbyItemIds.length,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -192,7 +214,7 @@ export async function runSync(): Promise<SyncSummary> {
       let result: CollectionSyncResult
 
       if (collection.type === 'custom') {
-        result = await syncCustomCollection(client, collection, embyCollectionMap)
+        result = await syncCustomCollection(client, collection, allItems, embyCollectionMap)
       } else {
         const isTmdb =
           collection.use_tmdb === 1 &&

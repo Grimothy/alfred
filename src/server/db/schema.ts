@@ -101,6 +101,11 @@ export function initDb(): void {
     db.exec('ALTER TABLE collection_items ADD COLUMN poster_path TEXT')
   } catch { /* already exists */ }
 
+  // Idempotent migration: add tmdb_id column to collection_items (for Emby→TMDB reversion)
+  try {
+    db.exec('ALTER TABLE collection_items ADD COLUMN tmdb_id INTEGER')
+  } catch { /* already exists */ }
+
   // Migrations — ALTER TABLE ignores columns that already exist
   const migrations = [
     'ALTER TABLE collections ADD COLUMN poster_path TEXT',

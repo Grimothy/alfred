@@ -164,9 +164,9 @@ router.post('/:id/items', async (req, res) => {
             // Item found in Emby — update existing TMDB entry to Emby
             const existing = getCollectionItems(id).find(i => i.item_id === itemId && i.source === 'tmdb')
             if (existing) {
-              updateCollectionItem(id, itemId, 'tmdb', embyItem.Id, 'emby')
+              updateCollectionItem(id, itemId, 'tmdb', embyItem.Id, 'emby', parseInt(itemId))
             } else {
-              addCollectionItem(id, embyItem.Id, 'emby', itemType, name ?? null, year ?? null, posterPath ?? null)
+              addCollectionItem(id, embyItem.Id, 'emby', itemType, name ?? null, year ?? null, posterPath ?? null, parseInt(itemId))
             }
             return res.status(201).json({ ok: true, source: 'emby', embyId: embyItem.Id })
           }
@@ -176,7 +176,7 @@ router.post('/:id/items', async (req, res) => {
       }
     }
 
-    addCollectionItem(id, itemId, source, itemType, name ?? null, year ?? null, posterPath ?? null)
+    addCollectionItem(id, itemId, source, itemType, name ?? null, year ?? null, posterPath ?? null, source === 'tmdb' ? parseInt(itemId) : null)
     return res.status(201).json({ ok: true })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -238,8 +238,21 @@ router.get('/:id/items', async (req, res) => {
               CommunityRating: embyItem.CommunityRating,
               ImageTags: embyItem.ImageTags,
             })
-          } catch (err) {
-            console.error(`Failed to fetch Emby item ${item.item_id}:`, err)
+          } catch {
+            // Item no longer exists in Emby — revert to TMDB if possible
+            if (item.tmdb_id != null) {
+              updateCollectionItem(id, item.item_id, 'emby', String(item.tmdb_id), 'tmdb')
+              result.tmdb.push({
+                id: item.tmdb_id,
+                name: item.name ?? `TMDB ${item.tmdb_id}`,
+                type: item.item_type || 'unknown',
+                year: item.year ? parseInt(item.year) : null,
+                poster_path: item.poster_path,
+              })
+            } else {
+              // No TMDB fallback — remove from collection
+              removeCollectionItem(id, item.item_id, 'emby')
+            }
           }
         }
       } else if (item.source === 'tmdb') {
@@ -261,7 +274,7 @@ router.get('/:id/items', async (req, res) => {
                 CommunityRating: embyItem.CommunityRating,
                 ImageTags: embyItem.ImageTags,
               })
-              updateCollectionItem(id, item.item_id, 'tmdb', embyItem.Id, 'emby')
+              updateCollectionItem(id, item.item_id, 'tmdb', embyItem.Id, 'emby', parseInt(item.item_id))
               promotedToEmby = true
             }
           } catch (err) {

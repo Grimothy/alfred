@@ -88,6 +88,7 @@ export interface CollectionItemRow {
   name: string | null
   year: string | null
   poster_path: string | null
+  tmdb_id: number | null
 }
 
 export function getCollections(): CollectionWithRules[] {
@@ -401,11 +402,12 @@ export function addCollectionItem(
   itemType?: 'movie' | 'series',
   name?: string | null,
   year?: string | null,
-  posterPath?: string | null
+  posterPath?: string | null,
+  tmdbId?: number | null
 ): void {
   db.prepare(
-    'INSERT OR IGNORE INTO collection_items (collection_id, item_id, source, item_type, name, year, poster_path) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(collectionId, itemId, source, itemType ?? null, name ?? null, year ?? null, posterPath ?? null)
+    'INSERT OR IGNORE INTO collection_items (collection_id, item_id, source, item_type, name, year, poster_path, tmdb_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(collectionId, itemId, source, itemType ?? null, name ?? null, year ?? null, posterPath ?? null, tmdbId ?? null)
 }
 
 export function removeCollectionItem(
@@ -445,9 +447,16 @@ export function updateCollectionItem(
   oldItemId: string,
   oldSource: 'emby' | 'tmdb',
   newItemId: string,
-  newSource: 'emby' | 'tmdb'
+  newSource: 'emby' | 'tmdb',
+  tmdbId?: number | null
 ): void {
-  db.prepare(
-    'UPDATE collection_items SET item_id = ?, source = ? WHERE collection_id = ? AND item_id = ? AND source = ?'
-  ).run(newItemId, newSource, collectionId, oldItemId, oldSource)
+  if (tmdbId !== undefined) {
+    db.prepare(
+      'UPDATE collection_items SET item_id = ?, source = ?, tmdb_id = ? WHERE collection_id = ? AND item_id = ? AND source = ?'
+    ).run(newItemId, newSource, tmdbId, collectionId, oldItemId, oldSource)
+  } else {
+    db.prepare(
+      'UPDATE collection_items SET item_id = ?, source = ? WHERE collection_id = ? AND item_id = ? AND source = ?'
+    ).run(newItemId, newSource, collectionId, oldItemId, oldSource)
+  }
 }

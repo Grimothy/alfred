@@ -983,15 +983,10 @@ export default function CollectionDetail() {
   }
 
   // Derive selection type breakdown
-  function getSelectionMeta(embyItems: EmbyItem[], tmdbItems: TmdbDiscoveryItem[]) {
-    const selEmby = embyItems.filter((i) => selectedEmbyIds.has(i.Id))
+  function getSelectionMeta(_embyItems: EmbyItem[], tmdbItems: TmdbDiscoveryItem[]) {
     const selTmdb = tmdbItems.filter((i) => selectedTmdbIds.has(i.id))
-    const hasMovies =
-      selEmby.some((i) => i.Type === 'Movie') ||
-      selTmdb.some((i) => i.type === 'movie')
-    const hasSeries =
-      selEmby.some((i) => i.Type === 'Series') ||
-      selTmdb.some((i) => i.type === 'tv')
+    const hasMovies = selTmdb.some((i) => i.type === 'movie')
+    const hasSeries = selTmdb.some((i) => i.type === 'tv')
     return { hasMovies, hasSeries, mixed: hasMovies && hasSeries }
   }
 

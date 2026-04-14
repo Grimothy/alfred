@@ -469,28 +469,7 @@ export default function MediaDetail() {
               </div>
             )}
 
-            <div className={styles.heroActions}>
-              {movie && (
-                <Button
-                  variant="purple"
-                  onClick={openRadarrModal}
-                  disabled={!radarrConfigured}
-                  title={!radarrConfigured ? 'Configure Radarr in Settings first' : undefined}
-                >
-                  Request to Radarr
-                </Button>
-              )}
-              {series && (
-                <Button
-                  variant="purple"
-                  onClick={() => openSonarrModal()}
-                  disabled={!sonarrConfigured}
-                  title={!sonarrConfigured ? 'Configure Sonarr in Settings first' : undefined}
-                >
-                  Request Full Series to Sonarr
-                </Button>
-              )}
-            </div>
+
           </div>
         </div>
       </div>
