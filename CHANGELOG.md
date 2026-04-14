@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0](https://github.com/Grimothy/alfred/compare/alfred-v1.4.0...alfred-v1.5.0) (2026-04-14)
+
+
+### Features
+
+* add remove-from-ARR modal for TMDB-only items and fix ProviderIds on Emby items ([2b97f26](https://github.com/Grimothy/alfred/commit/2b97f26b50e79dfa5f0d1ff67636d62b9d26ff04))
+* preserve tmdb_id on collection items for Emby→TMDB reversion ([709e3c5](https://github.com/Grimothy/alfred/commit/709e3c5b43b11c7ca574a5cd34ef62ce7f595503))
+
+
+### Bug Fixes
+
+* improve interactive search release picker and auto-refresh after requests ([5321659](https://github.com/Grimothy/alfred/commit/532165981f3c13a5292cc70a4055cecdf8d91233))
+
 ## [1.4.0](https://github.com/Grimothy/alfred/compare/alfred-v1.3.0...alfred-v1.4.0) (2026-04-14)
 
 
