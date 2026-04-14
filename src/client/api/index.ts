@@ -399,6 +399,61 @@ export interface RadarrQueueResponse {
 export const getRadarrQueue = () =>
   api.get<RadarrQueueResponse>('/radarr/queue').then((r) => r.data)
 
+// ── Radarr Interactive Search (Releases) ─────────────────────────────────────────
+
+export interface RadarrRelease {
+  guid: string
+  quality: { name: string; source: string; resolution: number }
+  customFormats: string[]
+  customFormatScore: number
+  size: number
+  indexer: string
+  releaseGroup: string
+  seeders: number
+  leechers: number
+  downloadUrl: string
+  magnetUrl: string
+  infoUrl: string
+  approved: boolean
+  rejected: boolean
+  rejectedReason: string
+  movieId: number
+}
+
+export const getRadarrReleases = (movieId: number) =>
+  api.get<RadarrRelease[]>('/radarr/releases', { params: { movieId } }).then((r) => r.data)
+
+export const downloadRadarrRelease = (payload: { guid: string; movieId: number; qualityProfileId?: number }) =>
+  api.post('/radarr/releases', payload).then((r) => r.data)
+
+// ── Sonarr Interactive Search (Releases) ────────────────────────────────────────
+
+export interface SonarrRelease {
+  guid: string
+  quality: { name: string; source: string; resolution: number }
+  customFormats: string[]
+  customFormatScore: number
+  size: number
+  indexer: string
+  releaseGroup: string
+  seeders: number
+  leechers: number
+  downloadUrl: string
+  magnetUrl: string
+  infoUrl: string
+  approved: boolean
+  rejected: boolean
+  rejectedReason: string
+  seriesId: number
+  episodes: { episodeId: number; seasonNumber: number; episodeNumber: number }[]
+}
+
+export const getSonarrReleases = (seriesId: number) =>
+  api.get<SonarrRelease[]>('/sonarr/releases', { params: { seriesId } }).then((r) => r.data)
+
+export const downloadSonarrRelease = (payload: { guid: string; seriesId: number; qualityProfileId?: number; episodeIds?: number[] }) =>
+  api.post('/sonarr/releases', payload).then((r) => r.data)
+
 export interface TmdbCompanyResult {
   id: number
   name: string

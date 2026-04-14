@@ -318,6 +318,55 @@ router.post('/series', async (req, res) => {
   }
 })
 
+// GET /api/sonarr/releases?seriesId=X — fetch available releases from indexers (interactive search)
+router.get('/releases', async (req, res) => {
+  const seriesId = parseInt(req.query.seriesId as string, 10)
+  if (!seriesId) return res.status(400).json({ error: 'seriesId query param is required' })
+  try {
+    const { base, apiKey } = sonarrClient()
+    const resp = await axios.get(`${base}/api/v3/release`, {
+      headers: sonarrHeaders(apiKey),
+      params: { seriesId },
+      timeout: 30_000,
+    })
+    return res.json(resp.data)
+  } catch (err) {
+    const msg = axios.isAxiosError(err) ? err.message : err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: msg })
+  }
+})
+
+// POST /api/sonarr/releases — download a specific release
+// Body: { guid: string, seriesId: number, qualityProfileId?: number }
+router.post('/releases', async (req, res) => {
+  const body = req.body as { guid: string; seriesId: number; qualityProfileId?: number; episodeIds?: number[] }
+  if (!body.guid || !body.seriesId) {
+    return res.status(400).json({ error: 'guid and seriesId are required' })
+  }
+  try {
+    const { base, apiKey } = sonarrClient()
+    const payload: Record<string, unknown> = {
+      guid: body.guid,
+      seriesId: body.seriesId,
+      qualityProfileId: body.qualityProfileId,
+      download: true,
+    }
+    if (body.episodeIds?.length) {
+      payload.episodeIds = body.episodeIds
+    }
+    await axios.post(`${base}/api/v3/release`, payload, {
+      headers: { ...sonarrHeaders(apiKey), 'Content-Type': 'application/json' },
+      timeout: 15_000,
+    })
+    return res.json({ ok: true })
+  } catch (err) {
+    const msg = axios.isAxiosError(err)
+      ? err.response?.data?.error ?? err.message
+      : err instanceof Error ? err.message : String(err)
+    return res.status(400).json({ error: msg })
+  }
+})
+
 // GET /api/sonarr/queue — get current download queue with progress
 router.get('/queue', async (_req, res) => {
   try {

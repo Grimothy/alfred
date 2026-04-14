@@ -44,12 +44,10 @@
 - Synopsis/Overview section, Details section (runtime, IDs)
 - For Series: season rows with availability indicators (✓ Available, ⚠ Partial, ✗ Missing)
 - Season availability: compared against `EpisodesInSeason` vs `EpisodeCount` from Emby
-- **Sonarr integration (series)**: "Request Full Series to Sonarr" button in hero; per-season "Request Missing" / "Request Season" buttons; bottom-right floating panel with quality profile + root folder selectors; success toast on completion; error display in panel
-- **Partial season request**: `seasonStatuses = [{ seasonNumber, monitored: true }]` — only that season monitored
-- **Full series request**: no `seasonStatuses` — all seasons monitored
-- `addOptions.searchForMissingEpisodes: true` — triggers automatic search after adding
-- **Radarr integration (movies)**: "Request to Radarr" button in hero; floating panel with quality profile + root folder selectors; success toast; error display in panel
-- `addOptions.searchForMovie: true` — triggers automatic search after adding
+- **Sonarr/Radarr integration**: uses shared `RequestModal` component (same as CollectionDetail); supports both Quick Add and Interactive Search flows
+- **Quick Add**: quality profile + root folder selectors (saved defaults pre-filled); submits directly
+- **Interactive Search**: for each item — silently adds to Sonarr/Radarr (no download), then fetches `GET /api/v3/release?movieId=X` or `?seriesId=X`, displays release picker (quality, size, indexer, seeders), user selects releases, `POST /api/v3/release` to queue downloads
+- For TMDB TV items: resolves tvdbId via Sonarr lookup before opening modal
 - Back navigation via `navigate(-1)`
   - TMDB items not yet in Emby: navigated via `?source=tmdb&tmdbId=X&type=Y&name=Z&year=W` params
   - **TMDB-only view**: when `source=tmdb` and item is not in Emby, fetches full TMDB detail via `GET /api/library/tmdb/:id?type=tv|movie`; renders backdrop, poster, overview, genres, Details (TMDB/TVDB/IMDB IDs, network, episodes), and season rows (all shown as ✗ missing since not in library)
@@ -84,12 +82,20 @@ Key functions and return types:
 - `addRadarrMovie(opts)` → Radarr movie
 - `getSonarrQualityProfiles()`, `getSonarrRootFolders()`, `getSonarrSeries()`
 - `getRadarrQualityProfiles()`, `getRadarrRootFolders()`, `getRadarrMovies()`
+- `getSonarrReleases(seriesId)` → `SonarrRelease[]` (interactive search results from indexers)
+- `getRadarrReleases(movieId)` → `RadarrRelease[]` (interactive search results from indexers)
+- `downloadSonarrRelease(opts)` → queues a specific release for download
+- `downloadRadarrRelease(opts)` → queues a specific release for download
 - `discoverTmdb(filters)` → `{ page, total_pages, total_results, results: TmdbDiscoverResult[] }` (TMDB discover for custom collections)
 - `getCollectionItems(id)` → `{ emby: EmbyItem[], tmdb: TmdbDiscoveryItem[] }` (custom collections)
-- `addCollectionItem(id, itemId, source, itemType?)` → void (custom collections)
+- `addCollectionItem(id, itemId, source, itemType?, name?, year?, posterPath?, tmdbId?)` → void (custom collections; tmdbId preserved for TMDB→Emby reversion)
 - `removeCollectionItem(id, itemId, source)` → void (custom collections)
+- `updateCollectionItem(id, oldItemId, oldSource, newItemId, newSource, tmdbId?)` → void (used for TMDB→Emby migration and Emby→TMDB reversion)
+- `requestSonarrBatch(opts)` → batch add series to Sonarr (used by CollectionDetail/RequestModal)
+- `requestRadarrBatch(opts)` → batch add movies to Radarr (used by CollectionDetail/RequestModal)
 
 Key types:
+- `Settings` — includes `sonarr_quality_profile` (default quality profile ID), `sonarr_root_folder` (default root folder path), `radarr_quality_profile`, `radarr_root_folder`
 - `Collection` — id, name, enabled (0|1), poster_path (abs FS path), backdrop_path (abs FS path), use_tmdb, include_tmdb_matches (0|1), type: 'emby'|'tmdb'|'custom', rules: Rule[]
 - `EmbyItem` — Id, Name, Type, Studios, Genres, Tags?, ProductionYear?, OfficialRating?, CommunityRating?, Overview?, ProviderIds, ImageTags?, BackdropImageTags?, SeasonCount?, Seasons?[]
 - `EmbyItemDetail` — extends EmbyItem with full detail (Seasons for series)
@@ -134,6 +140,8 @@ Key types:
 - `GET /api/sonarr/lookup?term=` — search series by term
 - `GET /api/sonarr/series` — list all series in Sonarr
 - `POST /api/sonarr/series` — add series; body: `{ tvdbId, seasonStatuses?, qualityProfileId?, rootFolderPath? }`; `seasonStatuses` for partial season monitoring
+- `GET /api/sonarr/releases?seriesId=X` — fetch available releases from indexers (interactive search)
+- `POST /api/sonarr/releases` — download a specific release; body: `{ guid, seriesId, qualityProfileId?, episodeIds? }`
 
 ### Radarr API (`/api/radarr`)
 - `GET /api/radarr/status` — configured, url, hasApiKey
@@ -143,6 +151,8 @@ Key types:
 - `GET /api/radarr/lookup?term=` — search movies by term
 - `GET /api/radarr/movie` — list all movies in Radarr
 - `POST /api/radarr/movie` — add movie; body: `{ tmdbId, qualityProfileId?, rootFolderPath? }`; `addOptions.searchForMovie: true`
+- `GET /api/radarr/releases?movieId=X` — fetch available releases from indexers (interactive search)
+- `POST /api/radarr/releases` — download a specific release; body: `{ guid, movieId, qualityProfileId? }`
 
 ### Collections API additions
 - `PATCH /api/collections/:id/toggle-tmdb-matches` — toggles `include_tmdb_matches` (0|1); only valid when `use_tmdb=1`
@@ -159,14 +169,23 @@ Key types:
 - `GET /api/library/item/:id?tmdbId=X` — resolves Emby item by TMDB provider ID first; returns 404 `{ error: 'Item not in Emby library' }` if not found (client falls back to TMDB-only view)
 - `GET /api/library/tmdb/:id?type=movie|tv` — fetches full TMDB detail (overview, genres, seasons, networks, external IDs) for items not yet in Emby; requires `tmdb_api_key` in settings
 
+## External API Reference
+
+Full Radarr, Sonarr, and Emby API documentation lives in `.opencode/context/api-reference.md`. Key highlights:
+
+- **Radarr v3**: Movie CRUD, lookup, queue, quality profiles, root folders, collections, commands, tags
+- **Sonarr v3**: Series CRUD, lookup, episodes, queue, quality profiles, root folders, commands, tags
+- **Emby REST**: Items query, Collections (BoxSet) CRUD, image upload/delete, series episodes/seasons, provider ID lookups (TMDB/TVDB/IMDB)
+- **Alfred integration coverage**: see bottom of api-reference.md for all currently proxied endpoints and potential expansion targets
+
 ## Key Server Files
 
 | File | Purpose |
 |---|---|
-| `src/server/db/schema.ts` | `initDb()` — SQLite WAL init, idempotent; manages `collections`, `collection_rules`, `collection_items`, `sync_history`, `tmdb_company_cache`, `tmdb_discovery_cache`, `tmdb_item_details` tables |
-| `src/server/db/queries.ts` | All typed SQLite access — `getCollections`, `createCollection`, etc.; discovery cache: `getDiscoveryCache`, `setDiscoveryCache`, `invalidateDiscoveryCache`; item detail cache: `getTmdbItemDetail`, `setTmdbItemDetail`, `getTmdbItemDetailBatch` (7-day TTL, per-item); custom collections: `addCollectionItem`, `removeCollectionItem`, `getCollectionItems`, `clearCollectionItems` |
+| `src/server/db/schema.ts` | `initDb()` — SQLite WAL init, idempotent; manages `collections`, `collection_rules`, `collection_items` (with `tmdb_id` column for item lifecycle tracking), `sync_history`, `tmdb_company_cache`, `tmdb_discovery_cache`, `tmdb_item_details` tables |
+| `src/server/db/queries.ts` | All typed SQLite access — `getCollections`, `createCollection`, etc.; discovery cache: `getDiscoveryCache`, `setDiscoveryCache`, `invalidateDiscoveryCache`; item detail cache: `getTmdbItemDetail`, `setTmdbItemDetail`, `getTmdbItemDetailBatch` (7-day TTL, per-item); custom collections: `addCollectionItem` (with tmdbId for lifecycle), `removeCollectionItem`, `getCollectionItems`, `clearCollectionItems`, `updateCollectionItem` (with tmdbId for TMDB→Emby migration) |
 | `src/server/emby/client.ts` | `EmbyClient` class + `getEmbyClient()` singleton |
-| `src/server/sync/engine.ts` | `runSync()`, `previewTmdbCollection*()`, `previewCollectionWithRules()`, `syncCustomCollection()`, `IMAGES_DIR` |
+| `src/server/sync/engine.ts` | `runSync()`, `previewTmdbCollection*()`, `previewCollectionWithRules()`, `syncCustomCollection()` — custom collection sync includes Emby→TMDB reversion: stale Emby items with `tmdb_id` revert to TMDB source; items without `tmdb_id` are removed, `IMAGES_DIR` |
 | `src/server/sync/scheduler.ts` | node-cron wrapper |
 
 ## Design Tokens (index.css)

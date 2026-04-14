@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   getItemDetail,
@@ -8,23 +8,12 @@ import {
   TmdbMovieDetail,
   EmbyItemDetail,
   getSonarrStatus,
-  getSonarrQualityProfiles,
-  getSonarrRootFolders,
-  addSonarrSeries,
-  getSonarrSeries,
-  lookupSonarrSeries,
   getRadarrStatus,
-  getRadarrQualityProfiles,
-  getRadarrRootFolders,
-  addRadarrMovie,
-  getRadarrMovies,
-  SonarrQualityProfile,
-  SonarrRootFolder,
-  RadarrQualityProfile,
-  RadarrRootFolder,
+  lookupSonarrSeries,
 } from '../api'
 import Badge from '../components/Badge'
 import Button from '../components/Button'
+import RequestModal from '../components/RequestModal'
 import styles from './MediaDetail.module.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -41,7 +30,7 @@ function posterUrl(item: EmbyItemDetail): string | null {
   return `/api/emby/image/${item.Id}?type=Primary&tag=${encodeURIComponent(tag)}&w=400`
 }
 
-function year(item: EmbyItemDetail): number | null {
+function itemYear(item: EmbyItemDetail): number | null {
   return item.ProductionYear ?? null
 }
 
@@ -65,7 +54,7 @@ interface SeasonRow {
 function buildSeasonRows(item: EmbyItemDetail): SeasonRow[] {
   if (!item.Seasons) return []
   return item.Seasons
-    .filter((s) => s.SeasonNumber > 0) // exclude specials (season 0)
+    .filter((s) => s.SeasonNumber > 0)
     .map((s) => {
       const count = s.EpisodeCount ?? 0
       const inSeason = s.EpisodesInSeason ?? count
@@ -92,178 +81,6 @@ function StatusDot({ status }: { status: SeasonRow['status'] }) {
   )
 }
 
-// ── Sonarr request panel ──────────────────────────────────────────────────────
-
-interface RequestPanelProps {
-  type: 'full' | 'season'
-  seasonNumber?: number
-  qualityProfiles: SonarrQualityProfile[]
-  rootFolders: SonarrRootFolder[]
-  profileId: number
-  rootFolder: string
-  onProfileChange: (id: number) => void
-  onRootFolderChange: (path: string) => void
-  onConfirm: () => void
-  onCancel: () => void
-  loading: boolean
-  error: string | null
-}
-
-function SonarrRequestPanel({
-  type,
-  seasonNumber,
-  qualityProfiles,
-  rootFolders,
-  profileId,
-  rootFolder,
-  onProfileChange,
-  onRootFolderChange,
-  onConfirm,
-  onCancel,
-  loading,
-  error,
-}: RequestPanelProps) {
-  return (
-    <div className={styles.requestPanel}>
-      <div className={styles.requestPanelHeader}>
-        <span className={styles.requestPanelTitle}>
-          {type === 'full'
-            ? 'Add Full Series to Sonarr'
-            : `Add Season ${seasonNumber} to Sonarr`}
-        </span>
-        <button className={styles.requestPanelClose} onClick={onCancel}>
-          ×
-        </button>
-      </div>
-
-      <div className={styles.requestPanelBody}>
-        <div className={styles.requestField}>
-          <label className={styles.requestLabel}>Quality Profile</label>
-          <select
-            className={styles.requestSelect}
-            value={profileId}
-            onChange={(e) => onProfileChange(Number(e.target.value))}
-          >
-            {qualityProfiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className={styles.requestField}>
-          <label className={styles.requestLabel}>Root Folder</label>
-          <select
-            className={styles.requestSelect}
-            value={rootFolder}
-            onChange={(e) => onRootFolderChange(e.target.value)}
-          >
-            {rootFolders.map((f) => (
-              <option key={f.id} value={f.path}>
-                {f.path}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {error && <p className={styles.requestError}>{error}</p>}
-
-        <div className={styles.requestActions}>
-          <Button variant="ghost" size="sm" onClick={onCancel} disabled={loading}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="sm" onClick={onConfirm} loading={loading}>
-            Add to Sonarr
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Radarr request panel ──────────────────────────────────────────────────────
-
-interface RadarrRequestPanelProps {
-  qualityProfiles: RadarrQualityProfile[]
-  rootFolders: RadarrRootFolder[]
-  profileId: number
-  rootFolder: string
-  onProfileChange: (id: number) => void
-  onRootFolderChange: (path: string) => void
-  onConfirm: () => void
-  onCancel: () => void
-  loading: boolean
-  error: string | null
-}
-
-function RadarrRequestPanel({
-  qualityProfiles,
-  rootFolders,
-  profileId,
-  rootFolder,
-  onProfileChange,
-  onRootFolderChange,
-  onConfirm,
-  onCancel,
-  loading,
-  error,
-}: RadarrRequestPanelProps) {
-  return (
-    <div className={styles.requestPanel}>
-      <div className={styles.requestPanelHeader}>
-        <span className={styles.requestPanelTitle}>Add Movie to Radarr</span>
-        <button className={styles.requestPanelClose} onClick={onCancel}>
-          ×
-        </button>
-      </div>
-
-      <div className={styles.requestPanelBody}>
-        <div className={styles.requestField}>
-          <label className={styles.requestLabel}>Quality Profile</label>
-          <select
-            className={styles.requestSelect}
-            value={profileId}
-            onChange={(e) => onProfileChange(Number(e.target.value))}
-          >
-            {qualityProfiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className={styles.requestField}>
-          <label className={styles.requestLabel}>Root Folder</label>
-          <select
-            className={styles.requestSelect}
-            value={rootFolder}
-            onChange={(e) => onRootFolderChange(e.target.value)}
-          >
-            {rootFolders.map((f) => (
-              <option key={f.id} value={f.path}>
-                {f.path}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {error && <p className={styles.requestError}>{error}</p>}
-
-        <div className={styles.requestActions}>
-          <Button variant="ghost" size="sm" onClick={onCancel} disabled={loading}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="sm" onClick={onConfirm} loading={loading}>
-            Add to Radarr
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function MediaDetail() {
@@ -272,29 +89,17 @@ export default function MediaDetail() {
   const navigate = useNavigate()
   const qc = useQueryClient()
 
-  // ── Request panel state ──────────────────────────────────────────────────
-  type RequestPanelState =
-    | null
-    | { type: 'full' }
-    | { type: 'season'; seasonNumber: number }
+  // ── Request modal state ──────────────────────────────────────────────────
+  const [requestModal, setRequestModal] = useState<{
+    open: boolean
+    clientType: 'sonarr' | 'radarr'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    items: any[]
+  }>({ open: false, clientType: 'radarr', items: [] })
 
-  const [requestPanel, setRequestPanel] = useState<RequestPanelState>(null)
-  const [selectedProfileId, setSelectedProfileId] = useState(1)
-  const [selectedRootFolder, setSelectedRootFolder] = useState('')
-  const [requestError, setRequestError] = useState<string | null>(null)
-  const [requestSuccess, setRequestSuccess] = useState<string | null>(null)
-  // For TMDB TV shows: store resolved lookup result after Sonarr lookup
-  const [resolvedTvdbId, setResolvedTvdbId] = useState<number | null>(null)
-  const [resolvedTitle, setResolvedTitle] = useState<string | undefined>(undefined)
-  const [resolvedTitleSlug, setResolvedTitleSlug] = useState<string | undefined>(undefined)
+  // ── Toast state ─────────────────────────────────────────────────────────
+  const [toast, setToast] = useState<string | null>(null)
   const [tmdbLookupLoading, setTmdbLookupLoading] = useState(false)
-
-  // ── Radarr request panel state ───────────────────────────────────────────
-  const [radarrPanelOpen, setRadarrPanelOpen] = useState(false)
-  const [radarrProfileId, setRadarrProfileId] = useState(1)
-  const [radarrRootFolder, setRadarrRootFolder] = useState('')
-  const [radarrError, setRadarrError] = useState<string | null>(null)
-  const [radarrSuccess, setRadarrSuccess] = useState<string | null>(null)
 
   // ── Data queries ──────────────────────────────────────────────────────────
   const source = searchParams.get('source')
@@ -305,7 +110,6 @@ export default function MediaDetail() {
     queryKey: ['item-detail', id, tmdbIdParam],
     queryFn: () => getItemDetail(id!, tmdbIdParam),
     enabled: !!id,
-    // A 404 for a TMDB item means "not in Emby yet" — not a hard error
     retry: (_, err) => {
       const status = (err as { response?: { status?: number } })?.response?.status
       return status !== 404
@@ -318,7 +122,12 @@ export default function MediaDetail() {
     retry: false,
   })
 
-  // Fetch TMDB detail when this is a TMDB-only item (404 from Emby or source=tmdb)
+  const { data: radarrStatus } = useQuery({
+    queryKey: ['radarr-status'],
+    queryFn: getRadarrStatus,
+    retry: false,
+  })
+
   const { data: tmdbDetail } = useQuery({
     queryKey: ['tmdb-detail', tmdbIdParam, tmdbType],
     queryFn: () => getTmdbDetail(tmdbIdParam!, tmdbType ?? 'movie'),
@@ -326,182 +135,76 @@ export default function MediaDetail() {
     retry: false,
   })
 
-  const { data: qualityProfiles = [] } = useQuery({
-    queryKey: ['sonarr-qualityprofiles'],
-    queryFn: getSonarrQualityProfiles,
-    enabled: !!requestPanel && !!sonarrStatus?.configured,
-  })
+  // ── Request handlers ─────────────────────────────────────────────────────
 
-  const { data: rootFolders = [] } = useQuery({
-    queryKey: ['sonarr-rootfolders'],
-    queryFn: getSonarrRootFolders,
-    enabled: !!requestPanel && !!sonarrStatus?.configured,
-  })
-
-  // Check if this series already exists in Sonarr
-  const tvdbId = item?.ProviderIds?.Tvdb
-    ? parseInt(item.ProviderIds.Tvdb, 10)
-    : resolvedTvdbId
-  const { data: sonarrSeries = [] } = useQuery({
-    queryKey: ['sonarr-series'],
-    queryFn: getSonarrSeries,
-    enabled: !!requestPanel && !!sonarrStatus?.configured && !!tvdbId,
-  })
-
-  // Pre-select first root folder when data arrives
-  if (rootFolders.length > 0 && !selectedRootFolder) {
-    setSelectedRootFolder(rootFolders[0].path)
+  function openSonarrModal(seasonNumber?: number) {
+    if (!item) return
+    setRequestModal({
+      open: true,
+      clientType: 'sonarr',
+      items: [{ ...item, _season: seasonNumber }],
+    })
   }
 
-  // ── Mutations ──────────────────────────────────────────────────────────────
-  const addSeriesMutation = useMutation({
-    mutationFn: addSonarrSeries,
-    onSuccess: () => {
-      setRequestError(null)
-      setRequestSuccess('Series added to Sonarr successfully.')
-      setRequestPanel(null)
-      qc.invalidateQueries({ queryKey: ['sonarr-series'] })
-      setTimeout(() => setRequestSuccess(null), 4000)
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error ?? 'Failed to add series'
-      setRequestError(msg)
-    },
-  })
-
-  // ── Radarr data queries ─────────────────────────────────────────────────
-  const { data: radarrStatus } = useQuery({
-    queryKey: ['radarr-status'],
-    queryFn: getRadarrStatus,
-    retry: false,
-  })
-
-  const { data: radarrQualityProfiles = [] } = useQuery({
-    queryKey: ['radarr-qualityprofiles'],
-    queryFn: getRadarrQualityProfiles,
-    enabled: radarrPanelOpen && !!radarrStatus?.configured,
-  })
-
-  const { data: radarrRootFolders = [] } = useQuery({
-    queryKey: ['radarr-rootfolders'],
-    queryFn: getRadarrRootFolders,
-    enabled: radarrPanelOpen && !!radarrStatus?.configured,
-  })
-
-  const { data: radarrMovies = [] } = useQuery({
-    queryKey: ['radarr-movies'],
-    queryFn: getRadarrMovies,
-    enabled: radarrPanelOpen && !!radarrStatus?.configured,
-  })
-
-  // Pre-select first root folder when data arrives
-  if (radarrRootFolders.length > 0 && !radarrRootFolder) {
-    setRadarrRootFolder(radarrRootFolders[0].path)
+  function openRadarrModal() {
+    if (!item) return
+    setRequestModal({
+      open: true,
+      clientType: 'radarr',
+      items: [item],
+    })
   }
 
-  const addMovieMutation = useMutation({
-    mutationFn: addRadarrMovie,
-    onSuccess: () => {
-      setRadarrError(null)
-      setRadarrSuccess('Movie added to Radarr successfully.')
-      setRadarrPanelOpen(false)
-      qc.invalidateQueries({ queryKey: ['radarr-movies'] })
-      setTimeout(() => setRadarrSuccess(null), 4000)
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error ?? 'Failed to add movie'
-      setRadarrError(msg)
-    },
-  })
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
-  const handleOpenRequest = (
-    type: 'full' | 'season',
-    seasonNumber?: number
-  ) => {
-    setRequestError(null)
-    setRequestSuccess(null)
-    if (type === 'season' && seasonNumber !== undefined) {
-      setRequestPanel({ type: 'season', seasonNumber })
-    } else {
-      setRequestPanel({ type: 'full' })
-    }
-  }
-
-  // For TMDB TV items: lookup TVDB ID via Sonarr, then open the request panel
-  const handleOpenTmdbSonarrRequest = async () => {
+  function openTmdbRadarrModal() {
     const tmdbIdParam = searchParams.get('tmdbId')
-    if (!tmdbIdParam) {
-      setRequestError('No TMDB ID available to look up.')
-      setRequestPanel({ type: 'full' })
-      return
-    }
-    setRequestError(null)
-    setRequestSuccess(null)
+    if (!tmdbIdParam) return
+    setRequestModal({
+      open: true,
+      clientType: 'radarr',
+      items: [{
+        _tmdbId: parseInt(tmdbIdParam, 10),
+        id: tmdbIdParam,
+        name: searchParams.get('name') ?? '',
+        year: searchParams.get('year') ?? null,
+        type: 'movie',
+      }],
+    })
+  }
+
+  async function openTmdbSonarrModal() {
+    const tmdbIdParam = searchParams.get('tmdbId')
+    if (!tmdbIdParam) return
     setTmdbLookupLoading(true)
     try {
       const results = await lookupSonarrSeries(`tmdb:${tmdbIdParam}`)
       const match = results?.[0]
-      if (!match?.tvdbId) throw new Error('Series not found in Sonarr lookup')
-      setResolvedTvdbId(match.tvdbId)
-      setResolvedTitle(match.title)
-      setResolvedTitleSlug(match.titleSlug)
-      setRequestPanel({ type: 'full' })
+      if (!match?.tvdbId) throw new Error('Series not found in Sonarr')
+      setRequestModal({
+        open: true,
+        clientType: 'sonarr',
+        items: [{
+          _tmdbId: parseInt(tmdbIdParam, 10),
+          tvdbId: match.tvdbId,
+          id: String(match.tvdbId),
+          name: match.title,
+          year: match.year ?? null,
+          type: 'tv',
+          tvdb_id: match.tvdbId,
+        }],
+      })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Sonarr lookup failed'
-      setRequestError(msg)
-      setRequestPanel({ type: 'full' }) // open panel so error is visible
+      setToast(err instanceof Error ? err.message : 'Failed to look up series')
     } finally {
       setTmdbLookupLoading(false)
     }
   }
 
-  const handleConfirmRequest = () => {
-    if (!tvdbId) {
-      setRequestError('No TVDB ID found for this series.')
-      return
-    }
-    let seasonStatuses: { seasonNumber: number; monitored: boolean }[] | undefined
-
-    if (requestPanel?.type === 'season') {
-      seasonStatuses = [
-        { seasonNumber: requestPanel.seasonNumber, monitored: true },
-      ]
-    }
-
-    addSeriesMutation.mutate({
-      tvdbId,
-      title: resolvedTitle,
-      titleSlug: resolvedTitleSlug,
-      seasonStatuses,
-      qualityProfileId: selectedProfileId,
-      rootFolderPath: selectedRootFolder,
-    })
-  }
-
-  const handleConfirmRadarrRequest = () => {
-    // TMDB source: use tmdbId from URL params; Emby source: use ProviderIds
-    const tmdbIdStr = item?.ProviderIds?.Tmdb ?? searchParams.get('tmdbId')
-    const tmdbId = tmdbIdStr ? parseInt(tmdbIdStr, 10) : null
-    if (!tmdbId) {
-      setRadarrError('No TMDB ID found for this movie.')
-      return
-    }
-    addMovieMutation.mutate({
-      tmdbId,
-      qualityProfileId: radarrProfileId,
-      rootFolderPath: radarrRootFolder,
-    })
-  }
-
-  const openRadarrPanel = () => {
-    setRadarrError(null)
-    setRadarrSuccess(null)
-    setRadarrPanelOpen(true)
+  function handleModalSuccess(added: number) {
+    setToast(`Requested ${added} item${added !== 1 ? 's' : ''} successfully.`)
+    setRequestModal((m) => ({ ...m, open: false }))
+    qc.invalidateQueries({ queryKey: ['radarr-movies'] })
+    qc.invalidateQueries({ queryKey: ['sonarr-series'] })
+    setTimeout(() => setToast(null), 4000)
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -509,7 +212,6 @@ export default function MediaDetail() {
     return <div className={styles.loading}>Loading…</div>
   }
 
-  // Hard error: non-TMDB item failed, or TMDB item failed for a reason other than "not in Emby"
   const is404 = (isError && (isError as unknown as { response?: { status?: number } })?.response?.status === 404)
   if (isError && !is404 && source !== 'tmdb') {
     return (
@@ -527,6 +229,8 @@ export default function MediaDetail() {
   const movie = item && isMovie(item)
   const series = item && isSeries(item)
   const seasonRows = item ? buildSeasonRows(item) : []
+  const sonarrConfigured = sonarrStatus?.configured ?? false
+  const radarrConfigured = radarrStatus?.configured ?? false
 
   // ── TMDB source (no Emby data) ──────────────────────────────────────────
   if (source === 'tmdb' && !item) {
@@ -538,7 +242,6 @@ export default function MediaDetail() {
     const tvDetail = type === 'tv' ? (tmdbDetail as TmdbTvDetail | undefined) : undefined
     const movieDetail = type === 'movie' ? (tmdbDetail as TmdbMovieDetail | undefined) : undefined
 
-    // Prefer TMDB backdrop if available
     const tmdbBackdrop = tmdbDetail?.backdrop_path
       ? `https://image.tmdb.org/t/p/w1280${tmdbDetail.backdrop_path}`
       : null
@@ -594,9 +297,9 @@ export default function MediaDetail() {
                 {type === 'movie' && (
                   <Button
                     variant="primary"
-                    onClick={openRadarrPanel}
-                    disabled={!radarrStatus?.configured}
-                    title={!radarrStatus?.configured ? 'Configure Radarr in Settings first' : undefined}
+                    onClick={openTmdbRadarrModal}
+                    disabled={!radarrConfigured}
+                    title={!radarrConfigured ? 'Configure Radarr in Settings first' : undefined}
                   >
                     Request to Radarr
                   </Button>
@@ -604,10 +307,10 @@ export default function MediaDetail() {
                 {type === 'tv' && (
                   <Button
                     variant="primary"
-                    onClick={() => handleOpenTmdbSonarrRequest()}
-                    disabled={!sonarrStatus?.configured || tmdbLookupLoading}
+                    onClick={openTmdbSonarrModal}
+                    disabled={!sonarrConfigured || tmdbLookupLoading}
                     loading={tmdbLookupLoading}
-                    title={!sonarrStatus?.configured ? 'Configure Sonarr in Settings first' : undefined}
+                    title={!sonarrConfigured ? 'Configure Sonarr in Settings first' : undefined}
                   >
                     Request to Sonarr
                   </Button>
@@ -619,7 +322,6 @@ export default function MediaDetail() {
 
         {/* ── Body ─────────────────────────────────────────────────────── */}
         <div className={styles.body}>
-          {/* Overview */}
           {overview && (
             <section className={styles.section}>
               <h2 className={styles.sectionTitle}>Overview</h2>
@@ -627,7 +329,6 @@ export default function MediaDetail() {
             </section>
           )}
 
-          {/* Details */}
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Details</h2>
             <dl className={styles.detailList}>
@@ -706,42 +407,15 @@ export default function MediaDetail() {
           )}
         </div>
 
-        {/* Sonarr request panel */}
-        {requestPanel && (
-          <SonarrRequestPanel
-            type={requestPanel.type}
-            seasonNumber={requestPanel.type === 'season' ? requestPanel.seasonNumber : undefined}
-            qualityProfiles={qualityProfiles}
-            rootFolders={rootFolders}
-            profileId={selectedProfileId}
-            rootFolder={selectedRootFolder}
-            onProfileChange={setSelectedProfileId}
-            onRootFolderChange={setSelectedRootFolder}
-            onConfirm={handleConfirmRequest}
-            onCancel={() => { setRequestPanel(null); setRequestError(null) }}
-            loading={addSeriesMutation.isPending}
-            error={requestError}
-          />
-        )}
+        {toast && <div className={styles.toastSuccess}>✓ {toast}</div>}
 
-        {/* Radarr request panel */}
-        {radarrPanelOpen && (
-          <RadarrRequestPanel
-            qualityProfiles={radarrQualityProfiles}
-            rootFolders={radarrRootFolders}
-            profileId={radarrProfileId}
-            rootFolder={radarrRootFolder}
-            onProfileChange={setRadarrProfileId}
-            onRootFolderChange={setRadarrRootFolder}
-            onConfirm={handleConfirmRadarrRequest}
-            onCancel={() => { setRadarrPanelOpen(false); setRadarrError(null) }}
-            loading={addMovieMutation.isPending}
-            error={radarrError}
-          />
-        )}
-
-        {requestSuccess && <div className={styles.toastSuccess}>✓ {requestSuccess}</div>}
-        {radarrSuccess && <div className={styles.toastSuccess}>✓ {radarrSuccess}</div>}
+        <RequestModal
+          open={requestModal.open}
+          clientType={requestModal.clientType}
+          items={requestModal.items}
+          onClose={() => setRequestModal((m) => ({ ...m, open: false }))}
+          onSuccess={handleModalSuccess}
+        />
       </div>
     )
   }
@@ -749,19 +423,12 @@ export default function MediaDetail() {
   // ── Emby item ─────────────────────────────────────────────────────────────
   const bdUrl = backdropUrl(item!)
   const poUrl = posterUrl(item!)
-  const yearStr = year(item!)?.toString() ?? null
+  const yearStr = itemYear(item!)?.toString() ?? null
   const studio = item!.Studios?.[0]?.Name ?? null
-  const sonarrConfigured = sonarrStatus?.configured ?? false
-  const radarrConfigured = radarrStatus?.configured ?? false
 
   return (
     <div className={styles.page}>
-      {/* ── Success toast ─────────────────────────────────────────────── */}
-      {(requestSuccess || radarrSuccess) && (
-        <div className={styles.toastSuccess}>
-          ✓ {requestSuccess || radarrSuccess}
-        </div>
-      )}
+      {toast && <div className={styles.toastSuccess}>✓ {toast}</div>}
 
       {/* ── Full-bleed backdrop hero ─────────────────────────────────── */}
       <div className={styles.hero}>
@@ -806,9 +473,9 @@ export default function MediaDetail() {
               {movie && (
                 <Button
                   variant="purple"
-                  onClick={openRadarrPanel}
-                  disabled={!radarrStatus?.configured}
-                  title={!radarrStatus?.configured ? 'Configure Radarr in Settings first' : undefined}
+                  onClick={openRadarrModal}
+                  disabled={!radarrConfigured}
+                  title={!radarrConfigured ? 'Configure Radarr in Settings first' : undefined}
                 >
                   Request to Radarr
                 </Button>
@@ -816,7 +483,7 @@ export default function MediaDetail() {
               {series && (
                 <Button
                   variant="purple"
-                  onClick={() => handleOpenRequest('full')}
+                  onClick={() => openSonarrModal()}
                   disabled={!sonarrConfigured}
                   title={!sonarrConfigured ? 'Configure Sonarr in Settings first' : undefined}
                 >
@@ -828,50 +495,17 @@ export default function MediaDetail() {
         </div>
       </div>
 
-      {/* ── Sonarr request panel (overlay) ────────────────────────────── */}
-      {requestPanel && (
-        <SonarrRequestPanel
-          type={requestPanel.type}
-          seasonNumber={requestPanel.type === 'season' ? requestPanel.seasonNumber : undefined}
-          qualityProfiles={qualityProfiles}
-          rootFolders={rootFolders}
-          profileId={selectedProfileId}
-          rootFolder={selectedRootFolder}
-          onProfileChange={setSelectedProfileId}
-          onRootFolderChange={setSelectedRootFolder}
-          onConfirm={handleConfirmRequest}
-          onCancel={() => { setRequestPanel(null); setRequestError(null) }}
-          loading={addSeriesMutation.isPending}
-          error={requestError}
-        />
-      )}
-
-      {/* ── Radarr request panel (overlay) ───────────────────────────── */}
-      {radarrPanelOpen && (
-        <RadarrRequestPanel
-          qualityProfiles={radarrQualityProfiles}
-          rootFolders={radarrRootFolders}
-          profileId={radarrProfileId}
-          rootFolder={radarrRootFolder}
-          onProfileChange={setRadarrProfileId}
-          onRootFolderChange={setRadarrRootFolder}
-          onConfirm={handleConfirmRadarrRequest}
-          onCancel={() => { setRadarrPanelOpen(false); setRadarrError(null) }}
-          loading={addMovieMutation.isPending}
-          error={radarrError}
-        />
-      )}
-
-      {/* ── Radarr success toast ─────────────────────────────────────── */}
-      {radarrSuccess && (
-        <div className={styles.toastSuccess}>
-          ✓ {radarrSuccess}
-        </div>
-      )}
+      {/* ── Request modal ─────────────────────────────────────────────── */}
+      <RequestModal
+        open={requestModal.open}
+        clientType={requestModal.clientType}
+        items={requestModal.items}
+        onClose={() => setRequestModal((m) => ({ ...m, open: false }))}
+        onSuccess={handleModalSuccess}
+      />
 
       {/* ── Body ─────────────────────────────────────────────────────── */}
       <div className={styles.body}>
-        {/* Synopsis */}
         {item!.Overview && (
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Overview</h2>
@@ -879,7 +513,6 @@ export default function MediaDetail() {
           </section>
         )}
 
-        {/* Media info */}
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Details</h2>
           <dl className={styles.detailList}>
@@ -953,7 +586,7 @@ export default function MediaDetail() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => handleOpenRequest('season', row.seasonNumber)}
+                          onClick={() => openSonarrModal(row.seasonNumber)}
                         >
                           {row.status === 'partial' ? 'Request Missing' : 'Request Season'}
                         </Button>

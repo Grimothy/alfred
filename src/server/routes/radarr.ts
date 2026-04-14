@@ -350,6 +350,52 @@ router.post('/movie', async (req, res) => {
   }
 })
 
+// GET /api/radarr/releases?movieId=X — fetch available releases from indexers (interactive search)
+router.get('/releases', async (req, res) => {
+  const movieId = parseInt(req.query.movieId as string, 10)
+  if (!movieId) return res.status(400).json({ error: 'movieId query param is required' })
+  try {
+    const { base, apiKey } = radarrClient()
+    const resp = await axios.get(`${base}/api/v3/release`, {
+      headers: radarrHeaders(apiKey),
+      params: { movieId },
+      timeout: 30_000,
+    })
+    return res.json(resp.data)
+  } catch (err) {
+    const msg = axios.isAxiosError(err) ? err.message : err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: msg })
+  }
+})
+
+// POST /api/radarr/releases — download a specific release
+// Body: { guid: string, movieId: number, qualityProfileId?: number }
+router.post('/releases', async (req, res) => {
+  const body = req.body as { guid: string; movieId: number; qualityProfileId?: number }
+  if (!body.guid || !body.movieId) {
+    return res.status(400).json({ error: 'guid and movieId are required' })
+  }
+  try {
+    const { base, apiKey } = radarrClient()
+    const payload: Record<string, unknown> = {
+      guid: body.guid,
+      movieId: body.movieId,
+      qualityProfileId: body.qualityProfileId,
+      download: true,
+    }
+    await axios.post(`${base}/api/v3/release`, payload, {
+      headers: { ...radarrHeaders(apiKey), 'Content-Type': 'application/json' },
+      timeout: 15_000,
+    })
+    return res.json({ ok: true })
+  } catch (err) {
+    const msg = axios.isAxiosError(err)
+      ? err.response?.data?.error ?? err.message
+      : err instanceof Error ? err.message : String(err)
+    return res.status(400).json({ error: msg })
+  }
+})
+
 // GET /api/radarr/queue — get current download queue with progress
 router.get('/queue', async (_req, res) => {
   try {
