@@ -19,6 +19,7 @@ import {
   invalidateDiscoveryCache,
   addCollectionItem,
   removeCollectionItem,
+  updateCollectionItem,
   getCollectionItems,
 } from '../db/queries'
 import {
@@ -131,7 +132,7 @@ router.get('/items/search', async (req, res) => {
 })
 
 // POST /api/collections/:id/items
-router.post('/:id/items', (req, res) => {
+router.post('/:id/items', async (req, res) => {
   const id = parseInt(req.params.id, 10)
   const { itemId, source, itemType, name, year, posterPath } = req.body as {
     itemId: string
@@ -150,6 +151,31 @@ router.post('/:id/items', (req, res) => {
   if (!col) return res.status(404).json({ error: 'Collection not found' })
 
   try {
+    // For custom collections adding TMDB items, check if item exists in Emby first
+    // If found, update any existing TMDB entry to Emby so it syncs properly and displays in "In Emby"
+    if (source === 'tmdb' && col.type === 'custom') {
+      const embyHost = getSetting('emby_host')
+      const embyApiKey = getSetting('emby_api_key')
+      if (embyHost && embyApiKey) {
+        try {
+          const embyClient = getEmbyClient(embyHost, embyApiKey)
+          const embyItem = await embyClient.getItemByTmdbId(itemId)
+          if (embyItem) {
+            // Item found in Emby — update existing TMDB entry to Emby
+            const existing = getCollectionItems(id).find(i => i.item_id === itemId && i.source === 'tmdb')
+            if (existing) {
+              updateCollectionItem(id, itemId, 'tmdb', embyItem.Id, 'emby')
+            } else {
+              addCollectionItem(id, embyItem.Id, 'emby', itemType, name ?? null, year ?? null, posterPath ?? null)
+            }
+            return res.status(201).json({ ok: true, source: 'emby', embyId: embyItem.Id })
+          }
+        } catch {
+          // Emby lookup failed — fall through to store as TMDB item
+        }
+      }
+    }
+
     addCollectionItem(id, itemId, source, itemType, name ?? null, year ?? null, posterPath ?? null)
     return res.status(201).json({ ok: true })
   } catch (err: unknown) {
@@ -193,7 +219,7 @@ router.get('/:id/items', async (req, res) => {
     const embyHost = getSetting('emby_host')
     const embyApiKey = getSetting('emby_api_key')
     
-    const result: { emby: Array<{ id: string; name: string; type: string; year: number | null; poster_path: string | null; backdrop_path: string | null }>; tmdb: Array<{ id: number; name: string; type: string; year: number | null; poster_path: string | null }> } = { emby: [], tmdb: [] }
+    const result: { emby: Array<{ Id: string; Name: string; Type: string; Genres?: string[]; ProductionYear?: number; OfficialRating?: string; CommunityRating?: number; ImageTags?: { Primary?: string } }>; tmdb: Array<{ id: number; name: string; type: string; year: number | null; poster_path: string | null }> } = { emby: [], tmdb: [] }
     
     for (const item of items) {
       if (item.source === 'emby') {
@@ -203,26 +229,55 @@ router.get('/:id/items', async (req, res) => {
             const embyClient = getEmbyClient(embyHost, embyApiKey)
             const embyItem = await embyClient.getItemById(item.item_id)
             result.emby.push({
-              id: embyItem.Id,
-              name: embyItem.Name,
-              type: embyItem.Type,
-              year: embyItem.ProductionYear || null,
-              poster_path: null,
-              backdrop_path: null
+              Id: embyItem.Id,
+              Name: embyItem.Name,
+              Type: embyItem.Type,
+              Genres: embyItem.Genres,
+              ProductionYear: embyItem.ProductionYear,
+              OfficialRating: embyItem.OfficialRating,
+              CommunityRating: embyItem.CommunityRating,
+              ImageTags: embyItem.ImageTags,
             })
           } catch (err) {
             console.error(`Failed to fetch Emby item ${item.item_id}:`, err)
           }
         }
       } else if (item.source === 'tmdb') {
-        // For TMDB items, use stored metadata
-        result.tmdb.push({
-          id: parseInt(item.item_id),
-          name: item.name ?? `TMDB ${item.item_id}`,
-          type: item.item_type || 'unknown',
-          year: item.year ? parseInt(item.year) : null,
-          poster_path: item.poster_path
-        })
+        // Check if this TMDB item has since become available in Emby
+        let promotedToEmby = false
+        if (embyHost && embyApiKey) {
+          try {
+            const embyClient = getEmbyClient(embyHost, embyApiKey)
+            const embyItem = await embyClient.getItemByTmdbId(item.item_id)
+            if (embyItem) {
+              // Item is now in Emby — promote to Emby section and update DB
+              result.emby.push({
+                Id: embyItem.Id,
+                Name: embyItem.Name,
+                Type: embyItem.Type,
+                Genres: embyItem.Genres,
+                ProductionYear: embyItem.ProductionYear,
+                OfficialRating: embyItem.OfficialRating,
+                CommunityRating: embyItem.CommunityRating,
+                ImageTags: embyItem.ImageTags,
+              })
+              updateCollectionItem(id, item.item_id, 'tmdb', embyItem.Id, 'emby')
+              promotedToEmby = true
+            }
+          } catch (err) {
+            console.error(`Failed to check Emby for TMDB item ${item.item_id}:`, err)
+          }
+        }
+        // If not yet in Emby, show as TMDB item
+        if (!promotedToEmby) {
+          result.tmdb.push({
+            id: parseInt(item.item_id),
+            name: item.name ?? `TMDB ${item.item_id}`,
+            type: item.item_type || 'unknown',
+            year: item.year ? parseInt(item.year) : null,
+            poster_path: item.poster_path
+          })
+        }
       }
     }
 

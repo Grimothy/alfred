@@ -247,7 +247,7 @@ concurrency:
 - `CLAUDE_CODE_OAUTH_TOKEN` secret configured in repository settings
 - At least one CI workflow to monitor (customize `workflows:` list)
 
-For the full template, see the [Claude Auto-Fix Workflow Template](../configure-workflows/REFERENCE.md#claude-auto-fix-workflow-template) in configure-workflows.
+For the full template, see the **Claude Auto-Fix Workflow Template** in the [configure-workflows](https://github.com/agent-system-lab/.github/tree/main/.github/skills/configure-workflows) skill reference.
 
 ## Workflow Standards
 

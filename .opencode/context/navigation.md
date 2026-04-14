@@ -58,11 +58,12 @@
 
 | Component | Props summary |
 |---|---|
-| Button | variant: primary/secondary/ghost/danger, size: sm/md/lg, loading |
+| Button | variant: primary/secondary/ghost/danger/purple, size: sm/md/lg, loading |
 | Badge | label, variant: default/gold/success/error, onRemove? |
 | Toggle | checked, onChange, disabled? |
 | Card | children, className?, accent? |
 | CollectionEditor | open, collection?, onClose — full create/edit drawer (480px) |
+| RequestModal | open, clientType, items, onClose, onSuccess — Sonarr/Radarr batch request modal with quality profile + root folder pickers |
 
 ## API (src/client/api/index.ts)
 

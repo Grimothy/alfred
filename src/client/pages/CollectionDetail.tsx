@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -9,6 +9,12 @@ import {
   previewCollectionById,
   getCollectionItems,
   removeCollectionItem,
+  requestSonarrBatch,
+  requestRadarrBatch,
+  getSonarrQueue,
+  getRadarrQueue,
+  getSonarrSeries,
+  getRadarrMovies,
   Collection,
   EmbyItem,
   TmdbDiscoveryItem,
@@ -18,6 +24,7 @@ import Button from '../components/Button'
 import Badge from '../components/Badge'
 import Toggle from '../components/Toggle'
 import CollectionEditor from '../components/CollectionEditor'
+import RequestModal from '../components/RequestModal'
 import styles from './CollectionDetail.module.css'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -74,20 +81,43 @@ function RemovableEmbyCard({
   collectionId,
   navigate,
   onRemove,
+  isSelected,
+  onToggle,
 }: {
   item: EmbyItem
   collectionId: number
   navigate: ReturnType<typeof useNavigate>
   onRemove: () => void
+  isSelected?: boolean
+  onToggle?: () => void
 }) {
   const posterUrl = itemPosterUrl(item)
 
   return (
-    <div className={styles.itemCardWrapper}>
+    <div className={[styles.itemCardWrapper, isSelected ? styles.itemCardSelected : ''].filter(Boolean).join(' ')}>
+      {/* Selection checkbox */}
+      {onToggle && (
+        <div
+          className={[styles.selectCheckbox, isSelected ? styles.selectCheckboxChecked : ''].filter(Boolean).join(' ')}
+          onClick={(e) => { e.stopPropagation(); onToggle() }}
+        >
+          {isSelected && (
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none">
+              <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </div>
+      )}
       <div
         className={styles.itemCard}
-        style={{ cursor: 'pointer' }}
-        onClick={() => navigate(`/library/item/${item.Id}`)}
+        style={{ cursor: onToggle ? 'pointer' : 'pointer' }}
+        onClick={() => {
+          if (onToggle) {
+            onToggle()
+          } else {
+            navigate(`/library/item/${item.Id}`)
+          }
+        }}
       >
         {posterUrl ? (
           <img src={posterUrl} alt={item.Name} className={styles.itemPosterImg} />
@@ -118,21 +148,32 @@ function RemovableEmbyCard({
 
 // ── Removable TMDB item card (for custom collections) ─────────────────────────
 
+type ItemRequestStatus = 'requested' | 'downloading' | 'completed' | 'failed'
+type RequestStatus = { status: ItemRequestStatus; progress?: number }
+
 function RemovableTmdbCard({
   item,
   collectionId,
   navigate,
   onRemove,
+  isSelected,
+  onToggle,
+  getItemStatus,
 }: {
   item: TmdbDiscoveryItem
   collectionId: number
   navigate: ReturnType<typeof useNavigate>
   onRemove: () => void
+  isSelected?: boolean
+  onToggle?: () => void
+  getItemStatus?: (item: TmdbDiscoveryItem) => RequestStatus | undefined
 }) {
   const posterUrl = tmdbPosterUrl(item.poster_path)
   const year =
     (item.type === 'movie' ? item.release_date?.slice(0, 4) : item.first_air_date?.slice(0, 4))
     ?? (item.year ? String(item.year) : undefined)
+
+  const status: RequestStatus | undefined = getItemStatus?.(item)
 
   function handleClick() {
     const params = new URLSearchParams({
@@ -146,24 +187,64 @@ function RemovableTmdbCard({
     navigate(`/library/item/${item.id}?${params.toString()}`)
   }
 
+  const statusBadge = status ? (
+    <div className={`${styles.statusBadge} ${styles[`statusBadge_${status.status}`]}`}>
+      {status.status === 'downloading' && (
+        <span className={styles.statusProgress}>{Math.round((status.progress ?? 0) * 100)}%</span>
+      )}
+      {status.status === 'requested' && <span>Queued</span>}
+      {status.status === 'downloading' && <span>Downloading</span>}
+      {status.status === 'completed' && <span>Downloaded</span>}
+      {status.status === 'failed' && <span>Failed</span>}
+    </div>
+  ) : null
+
   return (
-    <div className={styles.itemCardWrapper}>
+    <div className={[styles.itemCardWrapper, isSelected ? styles.itemCardSelected : ''].filter(Boolean).join(' ')}>
+      {/* Selection checkbox */}
+      {onToggle && (
+        <div
+          className={[styles.selectCheckbox, isSelected ? styles.selectCheckboxChecked : ''].filter(Boolean).join(' ')}
+          onClick={(e) => { e.stopPropagation(); onToggle() }}
+        >
+          {isSelected && (
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none">
+              <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </div>
+      )}
       <div
         className={`${styles.itemCard} ${styles.itemCardGlow}`}
         style={{ cursor: 'pointer' }}
-        onClick={handleClick}
+        onClick={(e) => { e.stopPropagation(); handleClick() }}
       >
         {posterUrl ? (
           <img src={posterUrl} alt={item.name} className={styles.itemPosterImg} />
         ) : (
           <div className={styles.itemMonogram}>{item.name.charAt(0).toUpperCase()}</div>
         )}
+
+        {/* Progress bar overlay — only render when we have a non-zero value */}
+        {status?.status === 'downloading' && (status.progress ?? 0) > 0 && (
+          <div className={styles.progressBar}>
+            <div
+              className={styles.progressFill}
+              style={{ width: `${Math.round((status.progress ?? 0) * 100)}%` }}
+            />
+          </div>
+        )}
+
         <div className={styles.itemScrim}>
           <span className={styles.itemName}>{item.name}</span>
           <span className={styles.itemType}>{item.type === 'movie' ? 'Movie' : 'Series'}</span>
           {year && <span className={styles.itemYear}>{year}</span>}
         </div>
+
+        {/* Status badge — inside card so position:absolute anchors to card */}
+        {statusBadge}
       </div>
+
       <button
         className={`${styles.removeBtn} ${styles.removeBtnPurple}`}
         onClick={(e) => {
@@ -178,13 +259,55 @@ function RemovableTmdbCard({
   )
 }
 
+// ── Selectable card wrappers ────────────────────────────────────────────────────
+
+interface SelectableCardProps {
+  isSelected: boolean
+  onToggle: () => void
+  children: React.ReactNode
+  className?: string
+}
+
+function SelectableCard({ isSelected, onToggle, children, className }: SelectableCardProps) {
+  return (
+    <div
+      className={[styles.itemCardWrapper, isSelected ? styles.itemCardSelected : '', className ?? ''].filter(Boolean).join(' ')}
+      style={{ position: 'relative' }}
+      onClick={onToggle}
+    >
+      {/* When selection is active, don't pass onClick to the child so it doesn't navigate */}
+      {React.cloneElement(children as React.ReactElement<{ onClick?: unknown }>, {
+        onClick: undefined,
+      })}
+      {/* Checkbox overlay */}
+      <div className={[styles.selectCheckbox, isSelected ? styles.selectCheckboxChecked : ''].filter(Boolean).join(' ')}>
+        {isSelected && (
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none">
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── TMDB match card (purple glow) ─────────────────────────────────────────────
 
-function TmdbMatchCard({ item, navigate }: { item: TmdbDiscoveryItem; navigate: ReturnType<typeof useNavigate> }) {
+function TmdbMatchCard({
+  item,
+  navigate,
+  getItemStatus,
+}: {
+  item: TmdbDiscoveryItem
+  navigate: ReturnType<typeof useNavigate>
+  getItemStatus?: (item: TmdbDiscoveryItem) => RequestStatus | undefined
+}) {
   const posterUrl = tmdbPosterUrl(item.poster_path)
   const year =
     (item.type === 'movie' ? item.release_date?.slice(0, 4) : item.first_air_date?.slice(0, 4))
     ?? (item.year ? String(item.year) : undefined)
+
+  const status: RequestStatus | undefined = getItemStatus?.(item)
 
   function handleClick() {
     const params = new URLSearchParams({
@@ -198,6 +321,18 @@ function TmdbMatchCard({ item, navigate }: { item: TmdbDiscoveryItem; navigate: 
     navigate(`/library/item/${item.id}?${params.toString()}`)
   }
 
+  const statusBadge = status ? (
+    <div className={`${styles.statusBadge} ${styles[`statusBadge_${status.status}`]}`}>
+      {status.status === 'downloading' && (
+        <span className={styles.statusProgress}>{Math.round((status.progress ?? 0) * 100)}%</span>
+      )}
+      {status.status === 'requested' && <span>Queued</span>}
+      {status.status === 'downloading' && <span>Downloading</span>}
+      {status.status === 'completed' && <span>Downloaded</span>}
+      {status.status === 'failed' && <span>Failed</span>}
+    </div>
+  ) : null
+
   return (
     <div
       className={`${styles.itemCard} ${styles.itemCardGlow}`}
@@ -209,11 +344,24 @@ function TmdbMatchCard({ item, navigate }: { item: TmdbDiscoveryItem; navigate: 
       ) : (
         <div className={styles.itemMonogram}>{item.name.charAt(0).toUpperCase()}</div>
       )}
+
+      {/* Progress bar overlay */}
+      {status?.status === 'downloading' && (status.progress ?? 0) > 0 && (
+        <div className={styles.progressBar}>
+          <div
+            className={styles.progressFill}
+            style={{ width: `${Math.round((status.progress ?? 0) * 100)}%` }}
+          />
+        </div>
+      )}
+
       <div className={styles.itemScrim}>
         <span className={styles.itemName}>{item.name}</span>
         <span className={styles.itemType}>{item.type === 'movie' ? 'Movie' : 'Series'}</span>
         {year && <span className={styles.itemYear}>{year}</span>}
       </div>
+
+      {statusBadge}
     </div>
   )
 }
@@ -262,10 +410,20 @@ function ExpandedOrStandardView({
   viewItems,
   filters,
   navigate,
+  selectedEmbyIds,
+  selectedTmdbIds,
+  toggleEmbySelection,
+  toggleTmdbSelection,
+  getItemStatus,
 }: {
   viewItems: PreviewResult | null
   filters: FilterState
   navigate: ReturnType<typeof useNavigate>
+  selectedEmbyIds: Set<string>
+  selectedTmdbIds: Set<number>
+  toggleEmbySelection: (id: string) => void
+  toggleTmdbSelection: (id: number) => void
+  getItemStatus?: (item: TmdbDiscoveryItem) => RequestStatus | undefined
 }) {
   if (!viewItems) {
     return <div className={styles.stateMsg}>No items in this collection yet.</div>
@@ -359,7 +517,13 @@ function ExpandedOrStandardView({
             </p>
             <div className={styles.itemGrid}>
               {filteredTmdb.map((item) => (
-                <TmdbMatchCard key={`tmdb-${item.id}`} item={item} navigate={navigate} />
+                <SelectableCard
+                  key={`tmdb-${item.id}`}
+                  isSelected={selectedTmdbIds.has(item.id)}
+                  onToggle={() => toggleTmdbSelection(item.id)}
+                >
+                  <TmdbMatchCard item={item} navigate={navigate} getItemStatus={getItemStatus} />
+                </SelectableCard>
               ))}
             </div>
           </div>
@@ -402,6 +566,11 @@ interface CustomCollectionViewProps {
   navigate: ReturnType<typeof useNavigate>
   onRemoveEmby: (itemId: string) => void
   onRemoveTmdb: (itemId: number) => void
+  selectedEmbyIds: Set<string>
+  selectedTmdbIds: Set<number>
+  toggleEmbySelection: (id: string) => void
+  toggleTmdbSelection: (id: number) => void
+  getItemStatus: (item: TmdbDiscoveryItem) => RequestStatus | undefined
 }
 
 function CustomCollectionView({
@@ -412,6 +581,11 @@ function CustomCollectionView({
   navigate,
   onRemoveEmby,
   onRemoveTmdb,
+  selectedEmbyIds,
+  selectedTmdbIds,
+  toggleEmbySelection,
+  toggleTmdbSelection,
+  getItemStatus,
 }: CustomCollectionViewProps) {
   // Apply filters to Emby items
   const filteredEmby = embyItems.filter((item) => {
@@ -518,6 +692,9 @@ function CustomCollectionView({
                 collectionId={collectionId}
                 navigate={navigate}
                 onRemove={() => onRemoveTmdb(item.id)}
+                isSelected={selectedTmdbIds.has(item.id)}
+                onToggle={() => toggleTmdbSelection(item.id)}
+                getItemStatus={getItemStatus}
               />
             ))}
           </div>
@@ -700,10 +877,125 @@ export default function CollectionDetail() {
 
   const [editorOpen, setEditorOpen] = useState(false)
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS)
+  const [selectedEmbyIds, setSelectedEmbyIds] = useState<Set<string>>(new Set())
+  const [selectedTmdbIds, setSelectedTmdbIds] = useState<Set<number>>(new Set())
+  const [requestModal, setRequestModal] = useState<{ open: boolean; clientType: 'sonarr' | 'radarr' }>({
+    open: false,
+    clientType: 'sonarr',
+  })
+  const [requestResult, setRequestResult] = useState<{ open: boolean; added: number; failed: number } | null>(null)
+
+  // Request status tracking — split by ID type so lookups are unambiguous:
+  //   tmdbStatuses: keyed by TMDB id (Radarr movies)
+  //   tvdbStatuses: keyed by TVDB id (Sonarr series)
+
+  // Poll download queues for in-progress items
+  const { data: sonarrQueue } = useQuery({
+    queryKey: ['sonarr-queue'],
+    queryFn: getSonarrQueue,
+    refetchInterval: 15_000,
+  })
+  const { data: radarrQueue } = useQuery({
+    queryKey: ['radarr-queue'],
+    queryFn: getRadarrQueue,
+    refetchInterval: 15_000,
+  })
+
+  // Poll Sonarr/Radarr library — gives persistent "in library" status across refreshes
+  const { data: sonarrSeries } = useQuery({
+    queryKey: ['sonarr-series'],
+    queryFn: getSonarrSeries,
+    refetchInterval: 60_000,
+  })
+  const { data: radarrMovies } = useQuery({
+    queryKey: ['radarr-movies'],
+    queryFn: getRadarrMovies,
+    refetchInterval: 60_000,
+  })
+
+  // Derive status for a TMDB item from live queue + library data — no ephemeral state
+  function getItemStatus(item: TmdbDiscoveryItem): RequestStatus | undefined {
+    if (item.type === 'movie') {
+      // Check Radarr queue first (most up-to-date progress)
+      const queueRecord = radarrQueue?.records.find((r) => r.tmdbId === item.id)
+      if (queueRecord) {
+        const s = queueRecord.status.toLowerCase()
+        if (s === 'completed' || s === 'completeddownload') return { status: 'completed' }
+        if (s === 'downloading' || s === 'importpending' || s === 'imported') {
+          return { status: 'downloading', progress: queueRecord.progress }
+        }
+        if (s === 'warning' || s === 'failed' || s === 'failedpending') return { status: 'failed' }
+        // Any other queue status (delay, queued, etc.) = requested
+        return { status: 'requested' }
+      }
+      // No queue record — check library for file or monitored state
+      const movie = radarrMovies?.find((m) => m.tmdbId === item.id)
+      if (movie?.hasFile) return { status: 'completed' }
+      // In Radarr but no file yet = user requested it, waiting for download to start
+      if (movie?.monitored) return { status: 'requested' }
+      return undefined
+    } else {
+      // Series — match by tvdb_id
+      const tvdbId = item.tvdb_id
+      if (!tvdbId) return undefined
+      const queueRecord = sonarrQueue?.records.find((r) => r.tvdbId === tvdbId)
+      if (queueRecord) {
+        const s = queueRecord.status.toLowerCase()
+        if (s === 'completed' || s === 'completeddownload') return { status: 'completed' }
+        if (s === 'downloading' || s === 'importpending' || s === 'imported') {
+          return { status: 'downloading', progress: queueRecord.progress }
+        }
+        if (s === 'warning' || s === 'failed' || s === 'failedpending') return { status: 'failed' }
+        return { status: 'requested' }
+      }
+      // No queue record — check Sonarr library
+      const series = sonarrSeries?.find((s) => s.tvdbId === tvdbId)
+      if (series?.monitored) return { status: 'requested' }
+      return undefined
+    }
+  }
 
   function patchFilters(patch: Partial<FilterState>) {
     setFilters((prev) => ({ ...prev, ...patch }))
   }
+
+  function toggleEmbySelection(id: string) {
+    setSelectedEmbyIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleTmdbSelection(id: number) {
+    setSelectedTmdbIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function clearSelection() {
+    setSelectedEmbyIds(new Set())
+    setSelectedTmdbIds(new Set())
+  }
+
+  // Derive selection type breakdown
+  function getSelectionMeta(embyItems: EmbyItem[], tmdbItems: TmdbDiscoveryItem[]) {
+    const selEmby = embyItems.filter((i) => selectedEmbyIds.has(i.Id))
+    const selTmdb = tmdbItems.filter((i) => selectedTmdbIds.has(i.id))
+    const hasMovies =
+      selEmby.some((i) => i.Type === 'Movie') ||
+      selTmdb.some((i) => i.type === 'movie')
+    const hasSeries =
+      selEmby.some((i) => i.Type === 'Series') ||
+      selTmdb.some((i) => i.type === 'tv')
+    return { hasMovies, hasSeries, mixed: hasMovies && hasSeries }
+  }
+
+  const totalSelected = selectedEmbyIds.size + selectedTmdbIds.size
 
   // Reuse the collections list query — already cached from the grid page
   const { data: collections = [], isLoading: collectionsLoading } = useQuery({
@@ -759,6 +1051,27 @@ export default function CollectionDetail() {
     mutationFn: (itemId: number) => removeCollectionItem(collectionId, String(itemId), 'tmdb'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['collection-items'] }),
   })
+
+  // Auto-promote: when radarrMovies reports hasFile for a TMDB item in this collection,
+  // Auto-promote: when radarrMovies reports hasFile for a TMDB item in this collection,
+  // invalidate collection-items so the server re-checks Emby and moves it to "In Emby"
+  const tmdbItems = useMemo(() => {
+    if (isCustomCollection) return customItems?.tmdb ?? []
+    if (viewItems && 'notInCollection' in viewItems) return viewItems.notInCollection
+    return []
+  }, [isCustomCollection, customItems, viewItems])
+
+  useEffect(() => {
+    if (!radarrMovies || tmdbItems.length === 0) return
+    const hasNewlyDownloaded = tmdbItems.some((item) => {
+      if (item.type !== 'movie') return false
+      const movie = radarrMovies.find((m) => m.tmdbId === item.id)
+      return movie?.hasFile === true
+    })
+    if (hasNewlyDownloaded) {
+      qc.invalidateQueries({ queryKey: ['collection-items', collectionId] })
+    }
+  }, [radarrMovies, tmdbItems, collectionId, qc])
 
   function confirmDelete() {
     if (!collection) return
@@ -854,9 +1167,14 @@ export default function CollectionDetail() {
             )}
 
             {/* Item count */}
-            {!itemsLoading && viewItems && (
+            {!isCustomCollection && !itemsLoading && viewItems && (
               <p className={styles.heroCount}>
                 {viewItems.count} item{viewItems.count !== 1 ? 's' : ''}
+              </p>
+            )}
+            {isCustomCollection && !customItemsLoading && customItems && (
+              <p className={styles.heroCount}>
+                {(customItems.tmdb?.length ?? 0) + (customItems.emby?.length ?? 0)} item{(customItems.tmdb?.length ?? 0) + (customItems.emby?.length ?? 0) !== 1 ? 's' : ''}
               </p>
             )}
 
@@ -925,6 +1243,11 @@ export default function CollectionDetail() {
                 navigate={navigate}
                 onRemoveEmby={(itemId) => removeEmbyMutation.mutate(itemId)}
                 onRemoveTmdb={(itemId) => removeTmdbMutation.mutate(itemId)}
+                selectedEmbyIds={selectedEmbyIds}
+                selectedTmdbIds={selectedTmdbIds}
+                toggleEmbySelection={toggleEmbySelection}
+                toggleTmdbSelection={toggleTmdbSelection}
+                getItemStatus={getItemStatus}
               />
             </>
           )
@@ -942,10 +1265,109 @@ export default function CollectionDetail() {
               viewItems={viewItems ?? null}
               filters={filters}
               navigate={navigate}
+              selectedEmbyIds={selectedEmbyIds}
+              selectedTmdbIds={selectedTmdbIds}
+              toggleEmbySelection={toggleEmbySelection}
+              toggleTmdbSelection={toggleTmdbSelection}
+              getItemStatus={getItemStatus}
             />
           </>
         )}
       </div>
+
+      {/* Floating selection bar */}
+      {totalSelected > 0 && (
+        <div className={styles.floatingBar}>
+          <div className={styles.floatingBarInfo}>
+            <span className={styles.floatingBarCount}>{totalSelected} selected</span>
+            {(() => {
+              const embyItems: EmbyItem[] = viewItems
+                ? ('inCollection' in viewItems ? viewItems.inCollection : viewItems.items)
+                : customItems?.emby ?? []
+              const tmdbItems: TmdbDiscoveryItem[] = 'notInCollection' in (viewItems ?? {})
+                ? (viewItems as ExpandedPreviewResponse)?.notInCollection ?? []
+                : customItems?.tmdb ?? []
+              const meta = getSelectionMeta(embyItems, tmdbItems)
+              if (meta.mixed) {
+                return <span className={styles.floatingBarError}>Can't request mixed — select only movies or only series</span>
+              }
+              if (meta.hasMovies) return <span className={styles.floatingBarRadarr}>Movies → Radarr</span>
+              if (meta.hasSeries) return <span className={styles.floatingBarSonarr}>Series → Sonarr</span>
+              return null
+            })()}
+          </div>
+          <div className={styles.floatingBarActions}>
+            <button className={styles.cancelBtn} onClick={clearSelection}>Cancel</button>
+            {(() => {
+              const embyItems: EmbyItem[] = viewItems
+                ? ('inCollection' in viewItems ? viewItems.inCollection : viewItems.items)
+                : customItems?.emby ?? []
+              const tmdbItems: TmdbDiscoveryItem[] = 'notInCollection' in (viewItems ?? {})
+                ? (viewItems as ExpandedPreviewResponse)?.notInCollection ?? []
+                : customItems?.tmdb ?? []
+              const meta = getSelectionMeta(embyItems, tmdbItems)
+              if (meta.mixed) return null
+              if (meta.hasMovies) {
+                return (
+                  <button className={styles.requestBtn} data-client="radarr" onClick={() => setRequestModal({ open: true, clientType: 'radarr' })}>
+                    Request to Radarr
+                  </button>
+                )
+              }
+              if (meta.hasSeries) {
+                return (
+                  <button className={styles.requestBtn} data-client="sonarr" onClick={() => setRequestModal({ open: true, clientType: 'sonarr' })}>
+                    Request to Sonarr
+                  </button>
+                )
+              }
+              return null
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Request modal */}
+      {(() => {
+        const embyItems: EmbyItem[] = viewItems
+          ? ('inCollection' in viewItems ? viewItems.inCollection : viewItems.items)
+          : customItems?.emby ?? []
+        const tmdbItems: TmdbDiscoveryItem[] = 'notInCollection' in (viewItems ?? {})
+          ? (viewItems as ExpandedPreviewResponse)?.notInCollection ?? []
+          : customItems?.tmdb ?? []
+        const selectedEmby = embyItems.filter((i) => selectedEmbyIds.has(i.Id))
+        const selectedTmdb = tmdbItems.filter((i) => selectedTmdbIds.has(i.id))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const allSelected: any[] = [
+          ...selectedEmby,
+          ...selectedTmdb.map((t) => ({ ...t, _tmdbId: t.id })),
+        ]
+        return (
+          <RequestModal
+            open={requestModal.open}
+            clientType={requestModal.clientType}
+            items={allSelected}
+            onClose={() => setRequestModal({ open: false, clientType: 'sonarr' })}
+            onSuccess={(added, failed, _requestedIds) => {
+              clearSelection()
+              setRequestResult({ open: true, added, failed })
+            }}
+          />
+        )
+      })()}
+
+      {/* Success toast */}
+      {requestResult && requestResult.open && (
+        <div className={styles.toast} onClick={() => setRequestResult(null)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M20 6L9 17l-5-5" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span>
+            {requestResult.added} added
+            {requestResult.failed > 0 && `, ${requestResult.failed} failed`}
+          </span>
+        </div>
+      )}
 
       <CollectionEditor
         open={editorOpen}

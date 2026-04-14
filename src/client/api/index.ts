@@ -223,6 +223,15 @@ export interface SonarrLookupResult {
   seasons?: { seasonNumber: number; episodeCount: number }[]
 }
 
+export interface RadarrLookupResult {
+  tmdbId: number
+  title: string
+  year?: number
+  overview?: string
+  poster?: string
+  genres?: string[]
+}
+
 // ── Sonarr API functions ───────────────────────────────────────────────────────
 
 export const getSonarrQualityProfiles = () =>

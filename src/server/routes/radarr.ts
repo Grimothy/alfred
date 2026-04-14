@@ -159,6 +159,144 @@ router.get('/movie/:id', async (req, res) => {
   }
 })
 
+// POST /api/radarr/retry-missing — re-add movies that are still "missing" in Radarr
+// Body: { items: Array<{ tmdbId }>, qualityProfileId?: number }
+router.post('/retry-missing', async (req, res) => {
+  const body = req.body as {
+    items: { tmdbId: number }[]
+    qualityProfileId?: number
+  }
+
+  if (!body.items?.length) {
+    return res.status(400).json({ error: 'items array is required' })
+  }
+
+  const { base, apiKey } = radarrClient()
+  const headers = { ...radarrHeaders(apiKey), 'Content-Type': 'application/json' }
+
+  const results: { tmdbId: number; success: boolean; error?: string }[] = []
+
+  for (const item of body.items) {
+    try {
+      // Check current movie status in Radarr
+      const movieResp = await axios.get(`${base}/api/v3/movie`, {
+        headers,
+        params: { tmdbId: item.tmdbId },
+        timeout: 10_000,
+      })
+      const movies = movieResp.data as Array<{
+        id: number
+        tmdbId: number
+        monitored: boolean
+        statistics?: { percentOfFiles: number }
+        movieFile?: { quality: string }
+      }>
+      const movie = movies.find((m) => String(m.tmdbId) === String(item.tmdbId))
+
+      if (!movie) {
+        results.push({ tmdbId: item.tmdbId, success: false, error: 'Movie not found in Radarr' })
+        continue
+      }
+
+      // Only retry if movie is still missing/unavailable — skip if it downloaded successfully
+      const hasFile = movie.movieFile != null
+      if (hasFile) {
+        // Movie downloaded successfully — no retry needed
+        results.push({ tmdbId: item.tmdbId, success: true })
+        continue
+      }
+
+      // Re-trigger search for the missing movie
+      const payload = {
+        tmdbId: item.tmdbId,
+        qualityProfileId: body.qualityProfileId ?? 1,
+        monitored: true,
+        addOptions: { searchForMovie: true },
+      }
+      await axios.post(`${base}/api/v3/movie`, payload, { headers, timeout: 15_000 })
+      results.push({ tmdbId: item.tmdbId, success: true })
+    } catch (err) {
+      let msg = 'Failed to retry movie'
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 409) {
+          // Already exists — still count as success
+          results.push({ tmdbId: item.tmdbId, success: true })
+          continue
+        }
+        const data = err.response?.data
+        if (typeof data === 'string') {
+          msg = data
+        } else if (Array.isArray(data)) {
+          msg = data.map((e: { errorMessage?: string; message?: string }) => e.errorMessage ?? e.message ?? String(e)).join('; ')
+        } else {
+          msg = data?.error ?? data?.message ?? `HTTP ${err.response?.status}: ${err.message}`
+        }
+      } else {
+        msg = err instanceof Error ? err.message : String(err)
+      }
+      results.push({ tmdbId: item.tmdbId, success: false, error: msg })
+    }
+  }
+
+  return res.json({ results })
+})
+
+// POST /api/radarr/request-batch — add multiple movies to Radarr
+// Body: { items: Array<{ tmdbId }>, qualityProfileId?, rootFolderPath? }
+router.post('/request-batch', async (req, res) => {
+  const body = req.body as {
+    items: { tmdbId: number }[]
+    qualityProfileId?: number
+    rootFolderPath?: string
+  }
+
+  if (!body.items || body.items.length === 0) {
+    return res.status(400).json({ error: 'items array is required' })
+  }
+
+  const { base, apiKey } = radarrClient()
+  const headers = { ...radarrHeaders(apiKey), 'Content-Type': 'application/json' }
+
+  const results: { tmdbId: number; success: boolean; error?: string }[] = []
+
+  for (const item of body.items) {
+    try {
+      const payload: Record<string, unknown> = {
+        tmdbId: item.tmdbId,
+        qualityProfileId: body.qualityProfileId ?? 1,
+        rootFolderPath: body.rootFolderPath ?? '',
+        monitored: true,
+        addOptions: { searchForMovie: true },
+      }
+
+      await axios.post(`${base}/api/v3/movie`, payload, { headers, timeout: 15_000 })
+      results.push({ tmdbId: item.tmdbId, success: true })
+    } catch (err) {
+      let msg = 'Unknown error'
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 409) {
+          msg = 'Movie already exists'
+        } else {
+          const data = err.response?.data
+          if (typeof data === 'string') {
+            msg = data
+          } else if (Array.isArray(data)) {
+            msg = data.map((e: { errorMessage?: string; message?: string }) => e.errorMessage ?? e.message ?? String(e)).join('; ')
+          } else {
+            msg = data?.error ?? data?.message ?? `HTTP ${err.response?.status}: ${err.message}`
+          }
+        }
+      } else {
+        msg = err instanceof Error ? err.message : String(err)
+      }
+      results.push({ tmdbId: item.tmdbId, success: false, error: msg })
+    }
+  }
+
+  const allSucceeded = results.every((r) => r.success)
+  return res.status(allSucceeded ? 201 : 207).json({ results })
+})
+
 // POST /api/radarr/movie — add movie to Radarr
 // Body: { tmdbId, qualityProfileId?, rootFolderPath? }
 router.post('/movie', async (req, res) => {
@@ -209,6 +347,41 @@ router.post('/movie', async (req, res) => {
       msg = err instanceof Error ? err.message : String(err)
     }
     return res.status(400).json({ error: msg })
+  }
+})
+
+// GET /api/radarr/queue — get current download queue with progress
+router.get('/queue', async (_req, res) => {
+  try {
+    const { base, apiKey } = radarrClient()
+    const resp = await axios.get(`${base}/api/v3/queue`, {
+      headers: radarrHeaders(apiKey),
+      params: { page: 1, pageSize: 100, sortKey: 'progress', sortDir: 'desc', includeMovie: true },
+      timeout: 10_000,
+    })
+    // Map to simpler shape
+    const records = (resp.data?.records ?? []).map((item: Record<string, unknown>) => {
+      const size = typeof item.size === 'number' ? item.size : 0
+      const sizeleft = typeof item.sizeleft === 'number' ? item.sizeleft : 0
+      const progress = size > 0 ? Math.max(0, Math.min(1, 1 - sizeleft / size)) : 0
+      return {
+        id: item.id,
+        title: item.title,
+        status: item.status,
+        progress, // 0-1
+        timeleft: item.timeleft ?? null,
+        downloadId: item.downloadId,
+        // Radarr v3: tmdbId is on the nested `movie` object.
+        // Some builds / queue states expose it at the top level too — check both.
+        tmdbId:
+          (item.movie as Record<string, unknown> | undefined)?.tmdbId ??
+          (typeof item.tmdbId === 'number' ? item.tmdbId : null),
+      }
+    })
+    return res.json({ records })
+  } catch (err) {
+    const msg = axios.isAxiosError(err) ? err.message : err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: msg })
   }
 })
 

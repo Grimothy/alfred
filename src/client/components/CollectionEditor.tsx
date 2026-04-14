@@ -406,13 +406,13 @@ export default function CollectionEditor({
       const filtered = response.results.filter((r) => !addedTmdbIds.has(r.id))
       if (page === 1) {
         setTmdbDiscoverResults(filtered)
+        // Scroll to results on initial search only, not on "Load More"
+        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
       } else {
         setTmdbDiscoverResults(prev => [...prev, ...filtered])
       }
       setTmdbDiscoverPage(response.page)
       setTmdbDiscoverTotalPages(response.total_pages)
-      // Scroll to results
-      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
     } catch (err) {
       setError('Failed to discover TMDB items')
       console.error('TMDB discover error:', err)

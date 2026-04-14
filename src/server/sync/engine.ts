@@ -14,6 +14,8 @@ import {
   setTmdbItemDetail,
   getTmdbItemDetailBatch,
   getCollectionItems,
+  updateCollectionItem,
+  getSetting,
 } from '../db/queries'
 import { getTmdbClient, TmdbMovie, TmdbTvShow } from '../tmdb/client'
 
@@ -76,9 +78,24 @@ async function syncCustomCollection(
   try {
     const customItems = getCollectionItems(collection.id)
 
-    // Filter to only Emby items (TMDB items are not synced to Emby)
-    const embyItems = customItems.filter((item) => item.source === 'emby')
-    const embyItemIds = embyItems.map((item) => item.item_id)
+    // First, migrate TMDB items that exist in Emby to 'emby' source
+    const tmdbItems = customItems.filter((item) => item.source === 'tmdb')
+    for (const tmdbItem of tmdbItems) {
+      try {
+        const embyItem = await client.getItemByTmdbId(tmdbItem.item_id)
+        if (embyItem) {
+          // Item exists in Emby — migrate it to 'emby' source
+          updateCollectionItem(collection.id, tmdbItem.item_id, 'tmdb', embyItem.Id, 'emby')
+        }
+      } catch {
+        // Not found in Emby — keep as TMDB item
+      }
+    }
+
+    // Refresh items after migration
+    const updatedItems = getCollectionItems(collection.id)
+    const embyItems = updatedItems.filter((item) => item.source === 'emby')
+    const embyItemIds = [...new Set(embyItems.map((item) => item.item_id))] // deduplicate
 
     let embyCollectionId = embyCollectionMap.get(collection.name.toLowerCase())
 

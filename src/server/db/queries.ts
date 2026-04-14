@@ -439,3 +439,15 @@ export function getCustomCollections(): CollectionWithRules[] {
 export function clearCollectionItems(collectionId: number): void {
   db.prepare('DELETE FROM collection_items WHERE collection_id = ?').run(collectionId)
 }
+
+export function updateCollectionItem(
+  collectionId: number,
+  oldItemId: string,
+  oldSource: 'emby' | 'tmdb',
+  newItemId: string,
+  newSource: 'emby' | 'tmdb'
+): void {
+  db.prepare(
+    'UPDATE collection_items SET item_id = ?, source = ? WHERE collection_id = ? AND item_id = ? AND source = ?'
+  ).run(newItemId, newSource, collectionId, oldItemId, oldSource)
+}
