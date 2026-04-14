@@ -12,7 +12,7 @@ export interface EmbyItem {
   PremiereDate?: string
   OfficialRating?: string
   CommunityRating?: number
-  ProviderIds?: { Imdb?: string; IMDB?: string; Tvdb?: string; TVDB?: string }
+  ProviderIds?: { Imdb?: string; IMDB?: string; Tvdb?: string; TVDB?: string; Tmdb?: string; TMDB?: string }
   ImageTags?: { Primary?: string; [key: string]: string | undefined }
   BackdropImageTags?: string[]
   Overview?: string
@@ -347,6 +347,12 @@ export class EmbyClient {
   async testConnection(): Promise<{ ServerName: string; Version: string }> {
     const res = await this.http.get('/emby/System/Info/Public')
     return res.data
+  }
+
+  async refreshLibrary(): Promise<void> {
+    await this.http.post('/emby/Library/Refresh', null, {
+      timeout: 60_000,
+    })
   }
 }
 

@@ -159,6 +159,26 @@ router.get('/series/:id', async (req, res) => {
   }
 })
 
+// GET /api/sonarr/series/:tvdbId/exists — check if a series exists in Sonarr by TVDB ID
+router.get('/series/:tvdbId/exists', async (req, res) => {
+  const tvdbId = parseInt(req.params.tvdbId, 10)
+  if (!tvdbId) return res.status(400).json({ error: 'tvdbId param is required' })
+  try {
+    const { base, apiKey } = sonarrClient()
+    const resp = await axios.get(`${base}/api/v3/series/lookup`, {
+      headers: sonarrHeaders(apiKey),
+      params: { term: `tvdb:${tvdbId}` },
+      timeout: 10_000,
+    })
+    const candidates = resp.data as Array<{ id: number; tvdbId: number }>
+    const series = candidates.find((s) => s.tvdbId === tvdbId)
+    return res.json({ exists: !!series, id: series?.id })
+  } catch (err) {
+    const msg = axios.isAxiosError(err) ? err.message : err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: msg })
+  }
+})
+
 // POST /api/sonarr/request-batch — add multiple series to Sonarr
 // Body: { items: Array<{ tvdbId, title?, titleSlug?, seasonStatuses? }>, qualityProfileId?, rootFolderPath? }
 router.post('/request-batch', async (req, res) => {
@@ -364,6 +384,44 @@ router.post('/releases', async (req, res) => {
       ? err.response?.data?.error ?? err.message
       : err instanceof Error ? err.message : String(err)
     return res.status(400).json({ error: msg })
+  }
+})
+
+// DELETE /api/sonarr/series/:tvdbId — delete series and associated files from Sonarr
+// Query: ?deleteFiles=true (default true if omitted)
+router.delete('/series/:tvdbId', async (req, res) => {
+  const tvdbId = parseInt(req.params.tvdbId, 10)
+  if (!tvdbId) return res.status(400).json({ error: 'tvdbId param is required' })
+
+  const deleteFiles = req.query.deleteFiles !== 'false'
+  const { base, apiKey } = sonarrClient()
+  const headers = { ...sonarrHeaders(apiKey), 'Content-Type': 'application/json' }
+
+  try {
+    // Look up series by tvdbId
+    const lookupResp = await axios.get(`${base}/api/v3/series/lookup`, {
+      headers,
+      params: { term: `tvdb:${tvdbId}` },
+      timeout: 10_000,
+    })
+    const candidates = lookupResp.data as Array<{ id: number; tvdbId: number }>
+    const series = candidates.find((s) => s.tvdbId === tvdbId)
+    if (!series) return res.status(404).json({ error: 'Series not found in Sonarr' })
+
+    await axios.delete(`${base}/api/v3/series/${series.id}`, {
+      headers,
+      params: { deleteFiles },
+      timeout: 30_000,
+    })
+    return res.json({ ok: true })
+  } catch (err) {
+    let msg = 'Failed to delete series from Sonarr'
+    if (axios.isAxiosError(err)) {
+      msg = err.response?.data?.error ?? err.response?.data?.message ?? err.message
+    } else if (err instanceof Error) {
+      msg = err.message
+    }
+    return res.status(500).json({ error: msg })
   }
 })
 

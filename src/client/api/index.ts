@@ -707,6 +707,27 @@ export const getSyncStatus = () =>
 export const getSyncHistory = () =>
   api.get<SyncHistoryItem[]>('/sync/history').then((r) => r.data)
 
+// ── Radarr / Sonarr delete ─────────────────────────────────────────────────────
+
+export const deleteRadarrMovie = (tmdbId: number) =>
+  api.delete(`/radarr/movie/${tmdbId}`).then((r) => r.data)
+
+export const deleteSonarrSeries = (tvdbId: string) =>
+  api.delete(`/sonarr/series/${tvdbId}`).then((r) => r.data)
+
+export const refreshEmbyLibrary = () =>
+  api.post('/emby/library/refresh').then((r) => r.data)
+
+export const checkRadarrMovieExists = (tmdbId: number) =>
+  api
+    .get<{ exists: boolean; id?: number }>(`/radarr/movie/${tmdbId}/exists`)
+    .then((r) => r.data)
+
+export const checkSonarrSeriesExists = (tvdbId: number) =>
+  api
+    .get<{ exists: boolean; id?: number }>(`/sonarr/series/${tvdbId}/exists`)
+    .then((r) => r.data)
+
 // ── Library ───────────────────────────────────────────────────────────────────
 
 export const getStudios = () =>

@@ -159,6 +159,27 @@ router.get('/movie/:id', async (req, res) => {
   }
 })
 
+// GET /api/radarr/movie/:tmdbId/exists — check if a movie exists in Radarr by TMDB ID
+router.get('/movie/:tmdbId/exists', async (req, res) => {
+  const tmdbId = parseInt(req.params.tmdbId, 10)
+  if (!tmdbId) return res.status(400).json({ error: 'tmdbId param is required' })
+  try {
+    const { base, apiKey } = radarrClient()
+    const resp = await axios.get(`${base}/api/v3/movie`, {
+      headers: radarrHeaders(apiKey),
+      params: { tmdbId },
+      timeout: 10_000,
+    })
+    const movies = (resp.data as Array<{ id: number; tmdbId: number }>)
+      .filter((m) => String(m.tmdbId) === String(tmdbId))
+    const movie = movies[0]
+    return res.json({ exists: !!movie, id: movie?.id })
+  } catch (err) {
+    const msg = axios.isAxiosError(err) ? err.message : err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: msg })
+  }
+})
+
 // POST /api/radarr/retry-missing — re-add movies that are still "missing" in Radarr
 // Body: { items: Array<{ tmdbId }>, qualityProfileId?: number }
 router.post('/retry-missing', async (req, res) => {
@@ -393,6 +414,45 @@ router.post('/releases', async (req, res) => {
       ? err.response?.data?.error ?? err.message
       : err instanceof Error ? err.message : String(err)
     return res.status(400).json({ error: msg })
+  }
+})
+
+// DELETE /api/radarr/movie/:tmdbId — delete movie and associated files from Radarr
+// Query: ?deleteFiles=true (default true if omitted)
+router.delete('/movie/:tmdbId', async (req, res) => {
+  const tmdbId = parseInt(req.params.tmdbId, 10)
+  if (!tmdbId) return res.status(400).json({ error: 'tmdbId param is required' })
+
+  const deleteFiles = req.query.deleteFiles !== 'false'
+  const { base, apiKey } = radarrClient()
+  const headers = { ...radarrHeaders(apiKey), 'Content-Type': 'application/json' }
+
+  try {
+    // Find movie by tmdbId to get Radarr's internal id
+    const movieResp = await axios.get(`${base}/api/v3/movie`, {
+      headers,
+      params: { tmdbId },
+      timeout: 10_000,
+    })
+    const movies = (movieResp.data as Array<{ id: number; tmdbId: number }>)
+      .filter((m) => String(m.tmdbId) === String(tmdbId))
+    const movie = movies[0]
+    if (!movie) return res.status(404).json({ error: 'Movie not found in Radarr' })
+
+    await axios.delete(`${base}/api/v3/movie/${movie.id}`, {
+      headers,
+      params: { deleteFiles, addImportExclusion: false },
+      timeout: 30_000,
+    })
+    return res.json({ ok: true })
+  } catch (err) {
+    let msg = 'Failed to delete movie from Radarr'
+    if (axios.isAxiosError(err)) {
+      msg = err.response?.data?.error ?? err.response?.data?.message ?? err.message
+    } else if (err instanceof Error) {
+      msg = err.message
+    }
+    return res.status(500).json({ error: msg })
   }
 })
 

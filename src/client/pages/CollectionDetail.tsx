@@ -13,8 +13,12 @@ import {
   requestRadarrBatch,
   getSonarrQueue,
   getRadarrQueue,
-  getSonarrSeries,
   getRadarrMovies,
+  getSonarrSeries,
+  deleteRadarrMovie,
+  deleteSonarrSeries,
+  refreshEmbyLibrary,
+  triggerSync,
   Collection,
   EmbyItem,
   TmdbDiscoveryItem,
@@ -25,6 +29,7 @@ import Badge from '../components/Badge'
 import Toggle from '../components/Toggle'
 import CollectionEditor from '../components/CollectionEditor'
 import RequestModal from '../components/RequestModal'
+import RemoveItemModal from '../components/RemoveItemModal'
 import styles from './CollectionDetail.module.css'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -564,8 +569,8 @@ interface CustomCollectionViewProps {
   tmdbItems: TmdbDiscoveryItem[]
   filters: FilterState
   navigate: ReturnType<typeof useNavigate>
-  onRemoveEmby: (itemId: string) => void
-  onRemoveTmdb: (itemId: number) => void
+  onRemoveEmby: (item: EmbyItem) => void
+  onRemoveTmdb: (item: TmdbDiscoveryItem) => void
   selectedEmbyIds: Set<string>
   selectedTmdbIds: Set<number>
   toggleEmbySelection: (id: string) => void
@@ -672,7 +677,7 @@ function CustomCollectionView({
                 item={item}
                 collectionId={collectionId}
                 navigate={navigate}
-                onRemove={() => onRemoveEmby(item.Id)}
+                onRemove={() => onRemoveEmby(item)}
               />
             ))}
           </div>
@@ -691,7 +696,7 @@ function CustomCollectionView({
                 item={item}
                 collectionId={collectionId}
                 navigate={navigate}
-                onRemove={() => onRemoveTmdb(item.id)}
+                onRemove={() => onRemoveTmdb(item)}
                 isSelected={selectedTmdbIds.has(item.id)}
                 onToggle={() => toggleTmdbSelection(item.id)}
                 getItemStatus={getItemStatus}
@@ -884,6 +889,12 @@ export default function CollectionDetail() {
     clientType: 'sonarr',
   })
   const [requestResult, setRequestResult] = useState<{ open: boolean; added: number; failed: number } | null>(null)
+  const [pendingRemoveItem, setPendingRemoveItem] = useState<EmbyItem | null>(null)
+  const [removeArrLoading, setRemoveArrLoading] = useState(false)
+  const [removeArrError, setRemoveArrError] = useState<string | null>(null)
+  const [pendingRemoveTmdbItem, setPendingRemoveTmdbItem] = useState<TmdbDiscoveryItem | null>(null)
+  const [removeTmdbArrLoading, setRemoveTmdbArrLoading] = useState(false)
+  const [removeTmdbArrError, setRemoveTmdbArrError] = useState<string | null>(null)
 
   // Request status tracking — split by ID type so lookups are unambiguous:
   //   tmdbStatuses: keyed by TMDB id (Radarr movies)
@@ -1046,6 +1057,59 @@ export default function CollectionDetail() {
     mutationFn: (itemId: number) => removeCollectionItem(collectionId, String(itemId), 'tmdb'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['collection-items'] }),
   })
+
+  async function handleRemoveFromArrAndCollection(item: EmbyItem) {
+    setRemoveArrLoading(true)
+    setRemoveArrError(null)
+    try {
+      const isMovie = item.Type === 'Movie'
+      if (isMovie) {
+        const tmdbId = item.ProviderIds?.Tmdb ?? item.ProviderIds?.TMDB
+        if (tmdbId) {
+          await deleteRadarrMovie(Number(tmdbId))
+        }
+      } else {
+        const tvdbId = item.ProviderIds?.Tvdb ?? item.ProviderIds?.TVDB
+        if (tvdbId) {
+          await deleteSonarrSeries(String(tvdbId))
+        }
+      }
+      await refreshEmbyLibrary()
+      await removeCollectionItem(collectionId, item.Id, 'emby')
+      triggerSync()
+      await qc.invalidateQueries({ queryKey: ['collection-items'] })
+      await qc.invalidateQueries({ queryKey: ['sync-status'] })
+      setPendingRemoveItem(null)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setRemoveArrError(msg)
+    } finally {
+      setRemoveArrLoading(false)
+    }
+  }
+
+  async function handleRemoveFromArrAndTmdbCollection(item: TmdbDiscoveryItem) {
+    setRemoveTmdbArrLoading(true)
+    setRemoveTmdbArrError(null)
+    try {
+      if (item.type === 'movie') {
+        await deleteRadarrMovie(item.id)
+      } else if (item.tvdb_id) {
+        await deleteSonarrSeries(String(item.tvdb_id))
+      }
+      await refreshEmbyLibrary()
+      await removeCollectionItem(collectionId, String(item.id), 'tmdb')
+      triggerSync()
+      await qc.invalidateQueries({ queryKey: ['collection-items'] })
+      await qc.invalidateQueries({ queryKey: ['sync-status'] })
+      setPendingRemoveTmdbItem(null)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setRemoveTmdbArrError(msg)
+    } finally {
+      setRemoveTmdbArrLoading(false)
+    }
+  }
 
   // Auto-promote: when radarrMovies reports hasFile for a TMDB item in this collection,
   // Auto-promote: when radarrMovies reports hasFile for a TMDB item in this collection,
@@ -1236,8 +1300,8 @@ export default function CollectionDetail() {
                 tmdbItems={customItems?.tmdb ?? []}
                 filters={filters}
                 navigate={navigate}
-                onRemoveEmby={(itemId) => removeEmbyMutation.mutate(itemId)}
-                onRemoveTmdb={(itemId) => removeTmdbMutation.mutate(itemId)}
+                onRemoveEmby={(item) => setPendingRemoveItem(item)}
+                onRemoveTmdb={(item) => setPendingRemoveTmdbItem(item)}
                 selectedEmbyIds={selectedEmbyIds}
                 selectedTmdbIds={selectedTmdbIds}
                 toggleEmbySelection={toggleEmbySelection}
@@ -1372,6 +1436,46 @@ export default function CollectionDetail() {
           qc.invalidateQueries({ queryKey: ['collections'] })
         }}
       />
+
+      {pendingRemoveItem && (
+        <RemoveItemModal
+          open={true}
+          item={pendingRemoveItem}
+          onClose={() => {
+            setPendingRemoveItem(null)
+            setRemoveArrError(null)
+          }}
+          onRemoveFromCollection={() => {
+            removeEmbyMutation.mutate(pendingRemoveItem.Id)
+            setPendingRemoveItem(null)
+          }}
+          onRemoveFromArrAndCollection={() => {
+            handleRemoveFromArrAndCollection(pendingRemoveItem)
+          }}
+          loading={removeArrLoading}
+          error={removeArrError}
+        />
+      )}
+
+      {pendingRemoveTmdbItem && (
+        <RemoveItemModal
+          open={true}
+          item={pendingRemoveTmdbItem}
+          onClose={() => {
+            setPendingRemoveTmdbItem(null)
+            setRemoveTmdbArrError(null)
+          }}
+          onRemoveFromCollection={() => {
+            removeTmdbMutation.mutate(pendingRemoveTmdbItem.id)
+            setPendingRemoveTmdbItem(null)
+          }}
+          onRemoveFromArrAndCollection={() => {
+            handleRemoveFromArrAndTmdbCollection(pendingRemoveTmdbItem)
+          }}
+          loading={removeTmdbArrLoading}
+          error={removeTmdbArrError}
+        />
+      )}
     </div>
   )
 }

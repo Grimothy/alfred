@@ -110,6 +110,25 @@ app.get('/api/emby/test', async (req, res) => {
   }
 })
 
+// POST /api/emby/library/refresh — trigger a full Emby library rescan
+app.post('/api/emby/library/refresh', async (_req, res) => {
+  const settings = getAllSettings()
+  const host = settings['emby_host']
+  const apiKey = settings['emby_api_key']
+  if (!host || !apiKey) {
+    return res.status(503).json({ error: 'Emby not configured' })
+  }
+
+  try {
+    const client = getEmbyClient(host, apiKey)
+    await client.refreshLibrary()
+    return res.json({ ok: true })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: msg })
+  }
+})
+
 // Debug: sample first 10 Series + Movie items with raw ProviderIds
 // GET /api/debug/emby-sample
 app.get('/api/debug/emby-sample', async (_req, res) => {

@@ -219,7 +219,7 @@ router.get('/:id/items', async (req, res) => {
     const embyHost = getSetting('emby_host')
     const embyApiKey = getSetting('emby_api_key')
     
-    const result: { emby: Array<{ Id: string; Name: string; Type: string; Genres?: string[]; ProductionYear?: number; OfficialRating?: string; CommunityRating?: number; ImageTags?: { Primary?: string } }>; tmdb: Array<{ id: number; name: string; type: string; year: number | null; poster_path: string | null }> } = { emby: [], tmdb: [] }
+    const result: { emby: Array<{ Id: string; Name: string; Type: string; Genres?: string[]; ProductionYear?: number; OfficialRating?: string; CommunityRating?: number; ImageTags?: { Primary?: string }; ProviderIds?: { Imdb?: string; IMDB?: string; Tvdb?: string; TVDB?: string; Tmdb?: string; TMDB?: string } }>; tmdb: Array<{ id: number; name: string; type: string; year: number | null; poster_path: string | null }> } = { emby: [], tmdb: [] }
     
     for (const item of items) {
       if (item.source === 'emby') {
@@ -237,6 +237,7 @@ router.get('/:id/items', async (req, res) => {
               OfficialRating: embyItem.OfficialRating,
               CommunityRating: embyItem.CommunityRating,
               ImageTags: embyItem.ImageTags,
+              ProviderIds: embyItem.ProviderIds,
             })
           } catch {
             // Item no longer exists in Emby — revert to TMDB if possible
@@ -273,6 +274,7 @@ router.get('/:id/items', async (req, res) => {
                 OfficialRating: embyItem.OfficialRating,
                 CommunityRating: embyItem.CommunityRating,
                 ImageTags: embyItem.ImageTags,
+                ProviderIds: embyItem.ProviderIds,
               })
               updateCollectionItem(id, item.item_id, 'tmdb', embyItem.Id, 'emby', parseInt(item.item_id))
               promotedToEmby = true

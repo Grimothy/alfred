@@ -62,6 +62,7 @@
 | Card | children, className?, accent? |
 | CollectionEditor | open, collection?, onClose — full create/edit drawer (480px) |
 | RequestModal | open, clientType, items, onClose, onSuccess — Sonarr/Radarr batch request modal with quality profile + root folder pickers |
+| RemoveItemModal | open, item: EmbyItem, onClose, onRemoveFromCollection, onRemoveFromArrAndCollection, loading, error — confirms removal from collections; "Remove from [Radarr/Sonarr]" disabled if no provider ID |
 
 ## API (src/client/api/index.ts)
 
@@ -93,6 +94,9 @@ Key functions and return types:
 - `updateCollectionItem(id, oldItemId, oldSource, newItemId, newSource, tmdbId?)` → void (used for TMDB→Emby migration and Emby→TMDB reversion)
 - `requestSonarrBatch(opts)` → batch add series to Sonarr (used by CollectionDetail/RequestModal)
 - `requestRadarrBatch(opts)` → batch add movies to Radarr (used by CollectionDetail/RequestModal)
+- `deleteRadarrMovie(tmdbId)` → void — deletes movie and files from Radarr
+- `deleteSonarrSeries(tvdbId)` → void — deletes series and files from Sonarr
+- `refreshEmbyLibrary()` → void — triggers Emby full library rescan
 
 Key types:
 - `Settings` — includes `sonarr_quality_profile` (default quality profile ID), `sonarr_root_folder` (default root folder path), `radarr_quality_profile`, `radarr_root_folder`
@@ -129,6 +133,7 @@ Key types:
 | `/api/radarr` | routes/radarr.ts |
 | `GET /api/emby/image/:itemId` | Inline in index.ts — proxies Emby image, hides API key |
 | `GET /api/emby/test` | Inline in index.ts |
+| `POST /api/emby/library/refresh` | Inline in index.ts — triggers Emby full library rescan |
 | `GET /api/health` | Inline in index.ts |
 | `GET /api/version` | Inline in index.ts |
 
@@ -140,6 +145,8 @@ Key types:
 - `GET /api/sonarr/lookup?term=` — search series by term
 - `GET /api/sonarr/series` — list all series in Sonarr
 - `POST /api/sonarr/series` — add series; body: `{ tvdbId, seasonStatuses?, qualityProfileId?, rootFolderPath? }`; `seasonStatuses` for partial season monitoring
+- `DELETE /api/sonarr/series/:tvdbId` — delete series and associated files from Sonarr; `?deleteFiles=true` (default)
+- `GET /api/sonarr/series/:tvdbId/exists` — check if series exists in Sonarr by TVDB ID; returns `{ exists: bool, id?: number }`
 - `GET /api/sonarr/releases?seriesId=X` — fetch available releases from indexers (interactive search)
 - `POST /api/sonarr/releases` — download a specific release; body: `{ guid, seriesId, qualityProfileId?, episodeIds? }`
 
@@ -151,6 +158,8 @@ Key types:
 - `GET /api/radarr/lookup?term=` — search movies by term
 - `GET /api/radarr/movie` — list all movies in Radarr
 - `POST /api/radarr/movie` — add movie; body: `{ tmdbId, qualityProfileId?, rootFolderPath? }`; `addOptions.searchForMovie: true`
+- `DELETE /api/radarr/movie/:tmdbId` — delete movie and associated files from Radarr; `?deleteFiles=true` (default)
+- `GET /api/radarr/movie/:tmdbId/exists` — check if movie exists in Radarr by TMDB ID; returns `{ exists: bool, id?: number }`
 - `GET /api/radarr/releases?movieId=X` — fetch available releases from indexers (interactive search)
 - `POST /api/radarr/releases` — download a specific release; body: `{ guid, movieId, qualityProfileId? }`
 
@@ -184,7 +193,7 @@ Full Radarr, Sonarr, and Emby API documentation lives in `.opencode/context/api-
 |---|---|
 | `src/server/db/schema.ts` | `initDb()` — SQLite WAL init, idempotent; manages `collections`, `collection_rules`, `collection_items` (with `tmdb_id` column for item lifecycle tracking), `sync_history`, `tmdb_company_cache`, `tmdb_discovery_cache`, `tmdb_item_details` tables |
 | `src/server/db/queries.ts` | All typed SQLite access — `getCollections`, `createCollection`, etc.; discovery cache: `getDiscoveryCache`, `setDiscoveryCache`, `invalidateDiscoveryCache`; item detail cache: `getTmdbItemDetail`, `setTmdbItemDetail`, `getTmdbItemDetailBatch` (7-day TTL, per-item); custom collections: `addCollectionItem` (with tmdbId for lifecycle), `removeCollectionItem`, `getCollectionItems`, `clearCollectionItems`, `updateCollectionItem` (with tmdbId for TMDB→Emby migration) |
-| `src/server/emby/client.ts` | `EmbyClient` class + `getEmbyClient()` singleton |
+| `src/server/emby/client.ts` | `EmbyClient` class + `getEmbyClient()` singleton; `refreshLibrary()` triggers Emby full library rescan |
 | `src/server/sync/engine.ts` | `runSync()`, `previewTmdbCollection*()`, `previewCollectionWithRules()`, `syncCustomCollection()` — custom collection sync includes Emby→TMDB reversion: stale Emby items with `tmdb_id` revert to TMDB source; items without `tmdb_id` are removed, `IMAGES_DIR` |
 | `src/server/sync/scheduler.ts` | node-cron wrapper |
 
