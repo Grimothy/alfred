@@ -319,12 +319,13 @@ router.post('/request-batch', async (req, res) => {
 })
 
 // POST /api/radarr/movie — add movie to Radarr
-// Body: { tmdbId, qualityProfileId?, rootFolderPath? }
+// Body: { tmdbId, qualityProfileId?, rootFolderPath?, search? }
 router.post('/movie', async (req, res) => {
   const body = req.body as {
     tmdbId: number
     qualityProfileId?: number
     rootFolderPath?: string
+    search?: boolean
   }
 
   if (!body.tmdbId) {
@@ -339,7 +340,7 @@ router.post('/movie', async (req, res) => {
       rootFolderPath: body.rootFolderPath ?? '',
       monitored: true,
       addOptions: {
-        searchForMovie: true,
+        searchForMovie: body.search ?? true,
       },
     }
 
@@ -349,6 +350,25 @@ router.post('/movie', async (req, res) => {
     })
     return res.status(201).json(resp.data)
   } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 409) {
+      try {
+        const { base, apiKey } = radarrClient()
+        const existsResp = await axios.get(`${base}/api/v3/movie`, {
+          headers: radarrHeaders(apiKey),
+          params: { tmdbId: body.tmdbId },
+          timeout: 10_000,
+        })
+        const movies = (existsResp.data as Array<{ id: number; tmdbId: number }>)
+          .filter((m) => String(m.tmdbId) === String(body.tmdbId))
+        const movie = movies[0]
+        if (movie) {
+          return res.status(200).json({ id: movie.id, tmdbId: body.tmdbId })
+        }
+      } catch {
+        // fall through to existing error handler
+      }
+    }
+
     let msg = 'Failed to add movie to Radarr'
     if (axios.isAxiosError(err)) {
       if (err.response?.status === 409) {
@@ -390,9 +410,9 @@ router.get('/releases', async (req, res) => {
 })
 
 // POST /api/radarr/releases — download a specific release
-// Body: { guid: string, movieId: number, qualityProfileId?: number }
+// Body: { guid: string, indexerId: number, movieId: number, qualityProfileId?: number }
 router.post('/releases', async (req, res) => {
-  const body = req.body as { guid: string; movieId: number; qualityProfileId?: number }
+  const body = req.body as { guid: string; indexerId: number; movieId: number; qualityProfileId?: number }
   if (!body.guid || !body.movieId) {
     return res.status(400).json({ error: 'guid and movieId are required' })
   }
@@ -400,6 +420,7 @@ router.post('/releases', async (req, res) => {
     const { base, apiKey } = radarrClient()
     const payload: Record<string, unknown> = {
       guid: body.guid,
+      indexerId: body.indexerId,
       movieId: body.movieId,
       qualityProfileId: body.qualityProfileId,
       download: true,

@@ -257,6 +257,7 @@ export interface AddSonarrSeriesOptions {
   seasonStatuses?: { seasonNumber: number; monitored: boolean }[]
   qualityProfileId?: number
   rootFolderPath?: string
+  search?: boolean
 }
 
 export const addSonarrSeries = (payload: AddSonarrSeriesOptions) =>
@@ -333,6 +334,7 @@ export interface AddRadarrMovieOptions {
   tmdbId: number
   qualityProfileId?: number
   rootFolderPath?: string
+  search?: boolean
 }
 
 export const addRadarrMovie = (payload: AddRadarrMovieOptions) =>
@@ -403,11 +405,12 @@ export const getRadarrQueue = () =>
 
 export interface RadarrRelease {
   guid: string
-  quality: { name: string; source: string; resolution: number }
+  quality: { quality: { name: string; source: string; resolution: number }; revision?: unknown }
   customFormats: string[]
   customFormatScore: number
   size: number
   indexer: string
+  indexerId: number
   releaseGroup: string
   seeders: number
   leechers: number
@@ -423,18 +426,19 @@ export interface RadarrRelease {
 export const getRadarrReleases = (movieId: number) =>
   api.get<RadarrRelease[]>('/radarr/releases', { params: { movieId } }).then((r) => r.data)
 
-export const downloadRadarrRelease = (payload: { guid: string; movieId: number; qualityProfileId?: number }) =>
+export const downloadRadarrRelease = (payload: { guid: string; indexerId: number; movieId: number; qualityProfileId?: number }) =>
   api.post('/radarr/releases', payload).then((r) => r.data)
 
 // ── Sonarr Interactive Search (Releases) ────────────────────────────────────────
 
 export interface SonarrRelease {
   guid: string
-  quality: { name: string; source: string; resolution: number }
+  quality: { quality: { name: string; source: string; resolution: number }; revision?: unknown }
   customFormats: string[]
   customFormatScore: number
   size: number
   indexer: string
+  indexerId: number
   releaseGroup: string
   seeders: number
   leechers: number
@@ -451,7 +455,7 @@ export interface SonarrRelease {
 export const getSonarrReleases = (seriesId: number) =>
   api.get<SonarrRelease[]>('/sonarr/releases', { params: { seriesId } }).then((r) => r.data)
 
-export const downloadSonarrRelease = (payload: { guid: string; seriesId: number; qualityProfileId?: number; episodeIds?: number[] }) =>
+export const downloadSonarrRelease = (payload: { guid: string; indexerId: number; seriesId: number; qualityProfileId?: number; episodeIds?: number[] }) =>
   api.post('/sonarr/releases', payload).then((r) => r.data)
 
 export interface TmdbCompanyResult {

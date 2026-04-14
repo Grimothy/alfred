@@ -258,7 +258,7 @@ router.post('/request-batch', async (req, res) => {
 })
 
 // POST /api/sonarr/series — add series to Sonarr
-// Body: { tvdbId, seasonStatuses?, qualityProfileId?, rootFolderPath? }
+// Body: { tvdbId, seasonStatuses?, qualityProfileId?, rootFolderPath?, search? }
 router.post('/series', async (req, res) => {
   const body = req.body as {
     tvdbId: number
@@ -267,6 +267,7 @@ router.post('/series', async (req, res) => {
     seasonStatuses?: { seasonNumber: number; monitored: boolean }[]
     qualityProfileId?: number
     rootFolderPath?: string
+    search?: boolean
   }
 
   if (!body.tvdbId) {
@@ -299,7 +300,7 @@ router.post('/series', async (req, res) => {
       monitored: true,
       seasonFolder: true,
       addOptions: {
-        searchForMissingEpisodes: true,
+        searchForMissingEpisodes: body.search ?? true,
       },
     }
 
@@ -318,6 +319,24 @@ router.post('/series', async (req, res) => {
     })
     return res.status(201).json(resp.data)
   } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 409) {
+      try {
+        const { base, apiKey } = sonarrClient()
+        const existsResp = await axios.get(`${base}/api/v3/series/lookup`, {
+          headers: sonarrHeaders(apiKey),
+          params: { term: `tvdb:${body.tvdbId}` },
+          timeout: 10_000,
+        })
+        const candidates = existsResp.data as Array<{ id: number; tvdbId: number }>
+        const series = candidates.find((s) => s.tvdbId === body.tvdbId)
+        if (series) {
+          return res.status(200).json({ id: series.id, tvdbId: body.tvdbId })
+        }
+      } catch {
+        // fall through to existing error handler
+      }
+    }
+
     let msg = 'Unknown error'
     if (axios.isAxiosError(err)) {
       if (err.response?.status === 409) {
@@ -357,9 +376,9 @@ router.get('/releases', async (req, res) => {
 })
 
 // POST /api/sonarr/releases — download a specific release
-// Body: { guid: string, seriesId: number, qualityProfileId?: number }
+// Body: { guid: string, indexerId: number, seriesId: number, qualityProfileId?: number }
 router.post('/releases', async (req, res) => {
-  const body = req.body as { guid: string; seriesId: number; qualityProfileId?: number; episodeIds?: number[] }
+  const body = req.body as { guid: string; indexerId: number; seriesId: number; qualityProfileId?: number; episodeIds?: number[] }
   if (!body.guid || !body.seriesId) {
     return res.status(400).json({ error: 'guid and seriesId are required' })
   }
@@ -367,6 +386,7 @@ router.post('/releases', async (req, res) => {
     const { base, apiKey } = sonarrClient()
     const payload: Record<string, unknown> = {
       guid: body.guid,
+      indexerId: body.indexerId,
       seriesId: body.seriesId,
       qualityProfileId: body.qualityProfileId,
       download: true,

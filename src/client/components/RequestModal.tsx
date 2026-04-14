@@ -14,6 +14,8 @@ import {
   getSonarrReleases,
   downloadRadarrRelease,
   downloadSonarrRelease,
+  checkRadarrMovieExists,
+  checkSonarrSeriesExists,
   SonarrBatchItem,
   RadarrBatchItem,
   SonarrBatchResult,
@@ -25,7 +27,7 @@ import Button from './Button'
 import styles from './RequestModal.module.css'
 
 type ClientType = 'sonarr' | 'radarr'
-type ModalMode = 'select' | 'quick-add' | 'interactive-search'
+type ModalMode = 'select' | 'quick-add' | 'interactive-setup' | 'interactive-search'
 type InteractiveStep = 'adding' | 'releases'
 
 interface EmbyItemLike {
@@ -66,14 +68,40 @@ interface ItemDisplay {
 interface ReleaseDisplay {
   guid: string
   quality: string
-  size: string
+  source: string
+  resolution: number
+  size: number
+  sizeFormatted: string
   indexer: string
+  indexerId: number
   seeders: number
+  leechers: number
   title: string
   approved: boolean
   rejected: boolean
+  rejectedReason: string
+  customFormatScore: number
+  releaseGroup: string
+  customFormats: string[]
   movieId?: number
   seriesId?: number
+}
+
+function normalizeCustomFormats(
+  customFormats: unknown
+): string[] {
+  if (!Array.isArray(customFormats)) return []
+  return customFormats
+    .map((cf) => {
+      if (typeof cf === 'string') return cf
+      if (cf && typeof cf === 'object') {
+        const obj = cf as { name?: unknown; id?: unknown }
+        if (typeof obj.name === 'string') return obj.name
+        if (typeof obj.id === 'number') return `CF ${obj.id}`
+      }
+      return ''
+    })
+    .filter((name) => name.length > 0)
 }
 
 function extractItems(items: RequestItem[], clientType: ClientType): ItemDisplay[] {
@@ -146,6 +174,21 @@ export default function RequestModal({
   const [allReleases, setAllReleases] = useState<ReleaseDisplay[]>([])
   const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
 
+  // Release table: sort
+  type SortCol = 'title' | 'quality' | 'resolution' | 'size' | 'customFormatScore' | 'indexer' | 'seeders' | 'leechers'
+  const [sortCol, setSortCol] = useState<SortCol>('customFormatScore')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  // Release table: filters
+  const [filterTitle, setFilterTitle] = useState('')
+  const [filterQuality, setFilterQuality] = useState('')
+  const [filterIndexer, setFilterIndexer] = useState('')
+  const [filterApprovedOnly, setFilterApprovedOnly] = useState(false)
+
+  // Release table: pagination
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(25)
+
   // Fetch saved settings for defaults
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -189,6 +232,14 @@ export default function RequestModal({
       setAddingProgress('')
       setAllReleases([])
       setSelectedGuids(new Set())
+      setSortCol('customFormatScore')
+      setSortDir('desc')
+      setFilterTitle('')
+      setFilterQuality('')
+      setFilterIndexer('')
+      setFilterApprovedOnly(false)
+      setPage(0)
+      setPageSize(25)
     }
   }, [open])
 
@@ -286,12 +337,12 @@ export default function RequestModal({
     setAddingProgress('Adding items…')
     setAllReleases([])
     setSelectedGuids(new Set())
+    setPage(0)
 
     try {
       const addedIds: { providerId: number; internalId: number; title: string }[] = []
 
       if (clientType === 'sonarr') {
-        // Add each series silently, then fetch releases
         for (let i = 0; i < displayItems.length; i++) {
           const item = displayItems[i]
           setAddingProgress(`Adding ${item.name}… (${i + 1}/${displayItems.length})`)
@@ -302,16 +353,19 @@ export default function RequestModal({
               title: item.name,
               qualityProfileId: qualityProfileId ?? undefined,
               rootFolderPath: rootFolderPath || undefined,
+              search: false,
             })
             addedIds.push({ providerId: tvdbId, internalId: added.id, title: item.name })
           } catch {
-            // Skip failures silently — already exists is fine
-            // Try to get existing series by tvdbId to get its ID
-            addedIds.push({ providerId: tvdbId, internalId: 0, title: item.name })
+            try {
+              const exists = await checkSonarrSeriesExists(tvdbId)
+              addedIds.push({ providerId: tvdbId, internalId: exists.id ?? 0, title: item.name })
+            } catch {
+              addedIds.push({ providerId: tvdbId, internalId: 0, title: item.name })
+            }
           }
         }
       } else {
-        // Radarr: add each movie silently, then fetch releases
         for (let i = 0; i < displayItems.length; i++) {
           const item = displayItems[i]
           setAddingProgress(`Adding ${item.name}… (${i + 1}/${displayItems.length})`)
@@ -321,49 +375,72 @@ export default function RequestModal({
               tmdbId,
               qualityProfileId: qualityProfileId ?? undefined,
               rootFolderPath: rootFolderPath || undefined,
+              search: false,
             })
             addedIds.push({ providerId: tmdbId, internalId: added.id, title: item.name })
           } catch {
-            addedIds.push({ providerId: tmdbId, internalId: 0, title: item.name })
+            try {
+              const exists = await checkRadarrMovieExists(tmdbId)
+              addedIds.push({ providerId: tmdbId, internalId: exists.id ?? 0, title: item.name })
+            } catch {
+              addedIds.push({ providerId: tmdbId, internalId: 0, title: item.name })
+            }
           }
         }
       }
 
       setAddingProgress('Fetching releases…')
 
-      // Fetch releases for all added items
       const releaseResults: ReleaseDisplay[] = []
       for (const { internalId, title } of addedIds) {
         if (!internalId) continue
         try {
           if (clientType === 'sonarr') {
-            const releases: SonarrRelease[] = await getSonarrReleases(internalId)
-            for (const rel of releases) {
-              releaseResults.push({
-                guid: rel.guid,
-                quality: rel.quality.name,
-                size: formatSize(rel.size),
-                indexer: rel.indexer,
-                seeders: rel.seeders,
-                title,
-                approved: rel.approved,
-                rejected: rel.rejected,
-                seriesId: internalId,
+              const releases: SonarrRelease[] = await getSonarrReleases(internalId)
+              for (const rel of releases) {
+                releaseResults.push({
+                  guid: rel.guid,
+                  quality: rel.quality.quality.name,
+                  source: rel.quality.quality.source ?? '',
+                  resolution: rel.quality.quality.resolution ?? 0,
+                size: rel.size,
+                  sizeFormatted: formatSize(rel.size),
+                  indexer: rel.indexer,
+                  indexerId: rel.indexerId ?? 0,
+                  seeders: rel.seeders,
+                  leechers: rel.leechers,
+                  title,
+                  approved: rel.approved,
+                  rejected: rel.rejected,
+                  rejectedReason: rel.rejectedReason ?? '',
+                  customFormatScore: rel.customFormatScore ?? 0,
+                  releaseGroup: rel.releaseGroup ?? '',
+                  customFormats: normalizeCustomFormats(rel.customFormats),
+                  seriesId: internalId,
               })
             }
           } else {
-            const releases: RadarrRelease[] = await getRadarrReleases(internalId)
-            for (const rel of releases) {
-              releaseResults.push({
-                guid: rel.guid,
-                quality: rel.quality.name,
-                size: formatSize(rel.size),
-                indexer: rel.indexer,
-                seeders: rel.seeders,
-                title,
-                approved: rel.approved,
-                rejected: rel.rejected,
-                movieId: internalId,
+              const releases: RadarrRelease[] = await getRadarrReleases(internalId)
+              for (const rel of releases) {
+                releaseResults.push({
+                  guid: rel.guid,
+                  quality: rel.quality.quality.name,
+                  source: rel.quality.quality.source ?? '',
+                  resolution: rel.quality.quality.resolution ?? 0,
+                size: rel.size,
+                  sizeFormatted: formatSize(rel.size),
+                  indexer: rel.indexer,
+                  indexerId: rel.indexerId ?? 0,
+                  seeders: rel.seeders,
+                  leechers: rel.leechers,
+                  title,
+                  approved: rel.approved,
+                  rejected: rel.rejected,
+                  rejectedReason: rel.rejectedReason ?? '',
+                  customFormatScore: rel.customFormatScore ?? 0,
+                  releaseGroup: rel.releaseGroup ?? '',
+                  customFormats: normalizeCustomFormats(rel.customFormats),
+                  movieId: internalId,
               })
             }
           }
@@ -406,6 +483,7 @@ export default function RequestModal({
           downloadPromises.push(
             downloadSonarrRelease({
               guid: rel.guid,
+              indexerId: rel.indexerId,
               seriesId: rel.seriesId,
               qualityProfileId: qualityProfileId ?? undefined,
             })
@@ -414,6 +492,7 @@ export default function RequestModal({
           downloadPromises.push(
             downloadRadarrRelease({
               guid: rel.guid,
+              indexerId: rel.indexerId,
               movieId: rel.movieId,
               qualityProfileId: qualityProfileId ?? undefined,
             })
@@ -435,9 +514,56 @@ export default function RequestModal({
 
   if (!open) return null
 
+  const isWide = mode === 'interactive-search' && interactiveStep === 'releases'
+
+  function handleSort(col: SortCol) {
+    if (sortCol === col) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortCol(col)
+      setSortDir('desc')
+    }
+    setPage(0)
+  }
+
+  function handleFilterChange(setter: React.Dispatch<React.SetStateAction<string>>) {
+    return (val: string) => {
+      setter(val)
+      setPage(0)
+    }
+  }
+
+  const filteredReleases = allReleases
+    .filter((r) => {
+      if (filterApprovedOnly && !r.approved) return false
+      if (filterTitle && !r.title.toLowerCase().includes(filterTitle.toLowerCase())) return false
+      if (filterQuality && !r.quality.toLowerCase().includes(filterQuality.toLowerCase())) return false
+      if (filterIndexer && !r.indexer.toLowerCase().includes(filterIndexer.toLowerCase())) return false
+      return true
+    })
+    .sort((a, b) => {
+      const approvedCmp = (b.approved ? 1 : 0) - (a.approved ? 1 : 0)
+      if (approvedCmp !== 0) return approvedCmp
+      let cmp = 0
+      switch (sortCol) {
+        case 'title': cmp = a.title.localeCompare(b.title); break
+        case 'quality': cmp = a.quality.localeCompare(b.quality); break
+        case 'resolution': cmp = a.resolution - b.resolution; break
+        case 'size': cmp = a.size - b.size; break
+        case 'customFormatScore': cmp = a.customFormatScore - b.customFormatScore; break
+        case 'indexer': cmp = a.indexer.localeCompare(b.indexer); break
+        case 'seeders': cmp = a.seeders - b.seeders; break
+        case 'leechers': cmp = a.leechers - b.leechers; break
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+
+  const totalPages = Math.max(1, Math.ceil(filteredReleases.length / pageSize))
+  const pagedReleases = filteredReleases.slice(page * pageSize, (page + 1) * pageSize)
+
   return (
     <div className={styles.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={styles.modal}>
+      <div className={[styles.modal, isWide ? styles.modalWide : ''].filter(Boolean).join(' ')}>
         {/* Header */}
         <div className={styles.header} style={{ '--client-accent': clientAccent } as React.CSSProperties}>
           <div className={styles.headerIcon}>
@@ -468,7 +594,7 @@ export default function RequestModal({
         </div>
 
         {/* Body */}
-        <div className={styles.body}>
+        <div className={[styles.body, isWide ? styles.bodyWide : ''].filter(Boolean).join(' ')}>
           {/* Mode: Select */}
           {mode === 'select' && (
             <>
@@ -506,7 +632,7 @@ export default function RequestModal({
 
                 <button
                   className={styles.modeBtn}
-                  onClick={startInteractiveSearch}
+                  onClick={() => setMode('interactive-setup')}
                 >
                   <span className={styles.modeBtnIcon}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -522,7 +648,7 @@ export default function RequestModal({
           )}
 
           {/* Mode: Quick Add */}
-          {mode === 'quick-add' && (
+          {(mode === 'quick-add' || mode === 'interactive-setup') && (
             <>
               <div className={styles.itemList}>
                 {displayItems.slice(0, 8).map((item) => (
@@ -571,7 +697,7 @@ export default function RequestModal({
             </>
           )}
 
-          {/* Mode: Interactive Search */}
+          {/* Mode: Interactive Search — Adding */}
           {mode === 'interactive-search' && interactiveStep === 'adding' && (
             <div className={styles.interactiveStatus}>
               <div className={styles.spinner} />
@@ -579,52 +705,211 @@ export default function RequestModal({
             </div>
           )}
 
+          {/* Mode: Interactive Search — Release Table */}
           {mode === 'interactive-search' && interactiveStep === 'releases' && (
             <>
               {interactiveError && <div className={styles.error}>{interactiveError}</div>}
 
-              <div className={styles.releaseList}>
-                {allReleases.length === 0 && (
-                  <div className={styles.noItems}>No releases found.</div>
-                )}
-                {allReleases.slice(0, 50).map((rel) => {
-                  const isSelected = selectedGuids.has(rel.guid)
-                  return (
-                    <div
-                      key={rel.guid}
-                      className={[styles.releaseRow, isSelected ? styles.releaseRowSelected : ''].filter(Boolean).join(' ')}
-                      onClick={() => toggleRelease(rel.guid)}
-                    >
-                      <div className={styles.releaseCheckbox}>
-                        <input type="checkbox" checked={isSelected} onChange={() => toggleRelease(rel.guid)} />
-                      </div>
-                      <div className={styles.releaseInfo}>
-                        <div className={styles.releaseTitleRow}>
-                          <span className={styles.releaseTitle}>{rel.title}</span>
-                          {!rel.approved && (
-                            <span className={styles.releaseRejected} title={rel.rejected ? 'Rejected: ' + rel.rejected : 'Not approved'}>⚠</span>
-                          )}
+              <div className={styles.releaseToolbar}>
+                <label className={styles.approvedToggle}>
+                  <input
+                    type="checkbox"
+                    checked={filterApprovedOnly}
+                    onChange={(e) => { setFilterApprovedOnly(e.target.checked); setPage(0) }}
+                  />
+                  <span>Approved only</span>
+                </label>
+              </div>
+
+              <div className={styles.releaseTableWrap}>
+                <table className={styles.releaseTable}>
+                  <thead>
+                    <tr>
+                      <th className={styles.thCheck}></th>
+                      <th className={styles.thSortable} onClick={() => handleSort('title')}>
+                        Title
+                        {sortCol === 'title' && <span className={styles.sortIcon}>{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>}
+                        <div className={styles.thFilter}>
+                          <input
+                            className={styles.thFilterInput}
+                            placeholder="Filter…"
+                            value={filterTitle}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => handleFilterChange(setFilterTitle)(e.target.value)}
+                          />
                         </div>
-                        <div className={styles.releaseMeta}>
-                          <span className={styles.releaseQuality}>{rel.quality}</span>
-                          <span className={styles.releaseDot}>·</span>
-                          <span className={styles.releaseSize}>{rel.size}</span>
-                          <span className={styles.releaseDot}>·</span>
-                          <span className={styles.releaseIndexer}>{rel.indexer}</span>
-                          {rel.seeders >= 0 && (
-                            <>
-                              <span className={styles.releaseDot}>·</span>
-                              <span className={styles.releaseSeeders}>⚤ {rel.seeders}</span>
-                            </>
-                          )}
+                      </th>
+                      <th className={styles.thSortable} onClick={() => handleSort('quality')}>
+                        Quality
+                        {sortCol === 'quality' && <span className={styles.sortIcon}>{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>}
+                        <div className={styles.thFilter}>
+                          <input
+                            className={styles.thFilterInput}
+                            placeholder="Filter…"
+                            value={filterQuality}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => handleFilterChange(setFilterQuality)(e.target.value)}
+                          />
                         </div>
-                      </div>
-                    </div>
-                  )
-                })}
-                {allReleases.length > 50 && (
-                  <div className={styles.itemMore}>+{allReleases.length - 50} more releases</div>
-                )}
+                      </th>
+                      <th className={styles.th}>Format</th>
+                      <th className={styles.th}>Status</th>
+                      <th className={styles.thSortable} onClick={() => handleSort('resolution')}>
+                        Res
+                        {sortCol === 'resolution' && <span className={styles.sortIcon}>{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>}
+                      </th>
+                      <th className={styles.thSortable} onClick={() => handleSort('size')}>
+                        Size
+                        {sortCol === 'size' && <span className={styles.sortIcon}>{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>}
+                      </th>
+                      <th className={styles.thSortable} onClick={() => handleSort('customFormatScore')}>
+                        CF Score
+                        {sortCol === 'customFormatScore' && <span className={styles.sortIcon}>{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>}
+                      </th>
+                      <th className={styles.th}>Custom Formats</th>
+                      <th className={styles.thSortable} onClick={() => handleSort('indexer')}>
+                        Indexer
+                        {sortCol === 'indexer' && <span className={styles.sortIcon}>{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>}
+                        <div className={styles.thFilter}>
+                          <input
+                            className={styles.thFilterInput}
+                            placeholder="Filter…"
+                            value={filterIndexer}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => handleFilterChange(setFilterIndexer)(e.target.value)}
+                          />
+                        </div>
+                      </th>
+                      <th className={styles.th}>Release Group</th>
+                      <th className={styles.thSortable} onClick={() => handleSort('seeders')}>
+                        Seeders
+                        {sortCol === 'seeders' && <span className={styles.sortIcon}>{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>}
+                      </th>
+                      <th className={styles.thSortable} onClick={() => handleSort('leechers')}>
+                        Leechers
+                        {sortCol === 'leechers' && <span className={styles.sortIcon}>{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>}
+                      </th>
+                      <th className={styles.th}>Rejection</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedReleases.length === 0 && (
+                      <tr>
+                        <td colSpan={14} className={styles.noItems}>
+                          {allReleases.length === 0 ? 'No releases found.' : 'No releases match your filters.'}
+                        </td>
+                      </tr>
+                    )}
+                    {pagedReleases.map((rel) => {
+                      const isSelected = selectedGuids.has(rel.guid)
+                      return (
+                        <tr
+                          key={rel.guid}
+                          className={isSelected ? styles.releaseRowSelected : ''}
+                          onClick={() => toggleRelease(rel.guid)}
+                        >
+                          <td className={styles.tdCheck}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleRelease(rel.guid)}
+                            />
+                          </td>
+                          <td className={styles.tdTitle}>
+                            <span className={styles.releaseTitleText}>{rel.title}</span>
+                          </td>
+                          <td className={styles.td}>
+                            <span className={styles.qualityBadge}>{rel.quality}</span>
+                          </td>
+                          <td className={styles.td}>
+                            {rel.source ? (
+                              <span className={styles.formatBadge}>{rel.source}</span>
+                            ) : '—'}
+                          </td>
+                          <td className={styles.tdStatus}>
+                            {rel.approved ? (
+                              <span className={styles.statusApproved}>Approved</span>
+                            ) : (
+                              <span className={styles.statusRejected} title={rel.rejectedReason || 'Not approved'}>Rejected</span>
+                            )}
+                          </td>
+                          <td className={styles.tdNumeric}>{rel.resolution ? `${rel.resolution}p` : '—'}</td>
+                          <td className={styles.tdNumeric}>{rel.sizeFormatted}</td>
+                          <td className={styles.tdNumeric}>
+                            {rel.customFormatScore !== 0 && (
+                              <span className={rel.customFormatScore > 0 ? styles.scorePos : styles.scoreNeg}>
+                                {rel.customFormatScore > 0 ? '+' : ''}{rel.customFormatScore}
+                              </span>
+                            )}
+                          </td>
+                          <td className={styles.td}>
+                            <div className={styles.customFormats}>
+                              {rel.customFormats.slice(0, 3).map((cf) => (
+                                <span key={cf} className={styles.cfTag}>{cf}</span>
+                              ))}
+                              {rel.customFormats.length > 3 && (
+                                <span className={styles.cfMore}>+{rel.customFormats.length - 3}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className={styles.td}>{rel.indexer}</td>
+                          <td className={styles.td}>{rel.releaseGroup || '—'}</td>
+                          <td className={styles.tdNumeric}>
+                            {rel.seeders >= 0 ? (
+                              <span className={styles.seeders}>⚤ {rel.seeders.toLocaleString()}</span>
+                            ) : '—'}
+                          </td>
+                          <td className={styles.tdNumeric}>
+                            {rel.leechers >= 0 ? rel.leechers.toLocaleString() : '—'}
+                          </td>
+                          <td className={styles.td}>
+                            {rel.rejected ? (
+                              <span className={styles.rejectedReason} title={rel.rejectedReason}>{rel.rejectedReason || 'Rejected'}</span>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className={styles.pagination}>
+                <span className={styles.paginationInfo}>
+                  {filteredReleases.length.toLocaleString()} releases
+                  {filteredReleases.length !== allReleases.length && ` (filtered from ${allReleases.length})`}
+                </span>
+                <div className={styles.paginationControls}>
+                  <button
+                    className={styles.pageBtn}
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                  >
+                    ‹ Prev
+                  </button>
+                  <span className={styles.pageNum}>
+                    {page + 1} / {totalPages}
+                  </span>
+                  <button
+                    className={styles.pageBtn}
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={page >= totalPages - 1}
+                  >
+                    Next ›
+                  </button>
+                  <select
+                    className={styles.pageSizeSelect}
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value))
+                      setPage(0)
+                    }}
+                  >
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                    <option value={100}>100 / page</option>
+                  </select>
+                </div>
               </div>
             </>
           )}
@@ -637,25 +922,36 @@ export default function RequestModal({
               Cancel
             </Button>
           )}
-          {mode === 'quick-add' && (
+          {(mode === 'quick-add' || mode === 'interactive-setup') && (
             <>
               <Button variant="ghost" onClick={() => setMode('select')} disabled={submitting}>
                 Back
               </Button>
-              <Button
-                variant={clientType === 'sonarr' ? 'secondary' : 'primary'}
-                onClick={handleQuickAdd}
-                loading={submitting}
-                disabled={displayItems.length === 0 || !qualityProfileId}
-              >
-                Request {displayItems.length} to {clientLabel}
-              </Button>
+              {mode === 'quick-add' ? (
+                <Button
+                  variant={clientType === 'sonarr' ? 'secondary' : 'primary'}
+                  onClick={handleQuickAdd}
+                  loading={submitting}
+                  disabled={displayItems.length === 0 || !qualityProfileId}
+                >
+                  Request {displayItems.length} to {clientLabel}
+                </Button>
+              ) : (
+                <Button
+                  variant={clientType === 'sonarr' ? 'secondary' : 'primary'}
+                  onClick={startInteractiveSearch}
+                  loading={submitting}
+                  disabled={displayItems.length === 0 || !qualityProfileId}
+                >
+                  Start Search
+                </Button>
+              )}
             </>
           )}
           {mode === 'interactive-search' && interactiveStep === 'releases' && (
             <>
-              <Button variant="ghost" onClick={() => setMode('select')} disabled={submitting}>
-                Back
+              <Button variant="ghost" onClick={() => setMode('interactive-setup')} disabled={submitting}>
+                ‹ Back
               </Button>
               <Button
                 variant={clientType === 'sonarr' ? 'secondary' : 'primary'}

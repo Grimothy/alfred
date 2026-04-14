@@ -900,16 +900,16 @@ export default function CollectionDetail() {
   //   tmdbStatuses: keyed by TMDB id (Radarr movies)
   //   tvdbStatuses: keyed by TVDB id (Sonarr series)
 
-  // Poll download queues for in-progress items
+  // Poll download queues — fast when items are actively downloading, slow otherwise
   const { data: sonarrQueue } = useQuery({
     queryKey: ['sonarr-queue'],
     queryFn: getSonarrQueue,
-    refetchInterval: 15_000,
+    refetchInterval: (query) => ((query.state.data?.records?.length ?? 0) > 0 ? 10_000 : 30_000),
   })
   const { data: radarrQueue } = useQuery({
     queryKey: ['radarr-queue'],
     queryFn: getRadarrQueue,
-    refetchInterval: 15_000,
+    refetchInterval: (query) => ((query.state.data?.records?.length ?? 0) > 0 ? 10_000 : 30_000),
   })
 
   // Poll Sonarr/Radarr library — gives persistent "in library" status across refreshes
@@ -1410,6 +1410,12 @@ export default function CollectionDetail() {
             onSuccess={(added, failed, _requestedIds) => {
               clearSelection()
               setRequestResult({ open: true, added, failed })
+              qc.invalidateQueries({ queryKey: ['collection-view'] })
+              qc.invalidateQueries({ queryKey: ['collection-items'] })
+              qc.invalidateQueries({ queryKey: ['radarr-movies'] })
+              qc.invalidateQueries({ queryKey: ['radarr-queue'] })
+              qc.invalidateQueries({ queryKey: ['sonarr-series'] })
+              qc.invalidateQueries({ queryKey: ['sonarr-queue'] })
             }}
           />
         )

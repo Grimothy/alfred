@@ -9,6 +9,8 @@ import {
   EmbyItemDetail,
   getSonarrStatus,
   getRadarrStatus,
+  getSonarrQueue,
+  getRadarrQueue,
   lookupSonarrSeries,
 } from '../api'
 import Badge from '../components/Badge'
@@ -128,6 +130,27 @@ export default function MediaDetail() {
     retry: false,
   })
 
+  const { data: sonarrQueue } = useQuery({
+    queryKey: ['sonarr-queue'],
+    queryFn: getSonarrQueue,
+    refetchInterval: (query) => ((query.state.data?.records?.length ?? 0) > 0 ? 10_000 : 30_000),
+    enabled: !!sonarrStatus?.configured,
+    retry: false,
+  })
+
+  const { data: radarrQueue } = useQuery({
+    queryKey: ['radarr-queue'],
+    queryFn: getRadarrQueue,
+    refetchInterval: (query) => ((query.state.data?.records?.length ?? 0) > 0 ? 10_000 : 30_000),
+    enabled: !!radarrStatus?.configured,
+    retry: false,
+  })
+
+  // Suppress unused-var warnings — queues are fetched to keep cache warm for
+  // invalidation after modal success; components may read them via queryClient
+  void sonarrQueue
+  void radarrQueue
+
   const { data: tmdbDetail } = useQuery({
     queryKey: ['tmdb-detail', tmdbIdParam, tmdbType],
     queryFn: () => getTmdbDetail(tmdbIdParam!, tmdbType ?? 'movie'),
@@ -202,8 +225,11 @@ export default function MediaDetail() {
   function handleModalSuccess(added: number) {
     setToast(`Requested ${added} item${added !== 1 ? 's' : ''} successfully.`)
     setRequestModal((m) => ({ ...m, open: false }))
+    qc.invalidateQueries({ queryKey: ['item-detail'] })
     qc.invalidateQueries({ queryKey: ['radarr-movies'] })
+    qc.invalidateQueries({ queryKey: ['radarr-queue'] })
     qc.invalidateQueries({ queryKey: ['sonarr-series'] })
+    qc.invalidateQueries({ queryKey: ['sonarr-queue'] })
     setTimeout(() => setToast(null), 4000)
   }
 

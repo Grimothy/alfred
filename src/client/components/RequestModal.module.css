@@ -409,3 +409,372 @@
   font-size: 10px;
   color: var(--success);
 }
+
+/* ── Wide modal (release table) ─────────────────────────── */
+.modalWide {
+  max-width: 98vw;
+  width: 1300px;
+  max-height: 95vh;
+}
+
+.bodyWide {
+  padding: 16px 20px;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Release table ───────────────────────────────────────── */
+.releaseTableWrap {
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  flex: 1;
+  min-height: 0;
+}
+
+.releaseTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.releaseTable thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-elevated);
+}
+
+.releaseTable th {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.thCheck {
+  width: 36px;
+  padding: 8px 6px 8px 12px;
+}
+
+.thSortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.thSortable:hover {
+  color: var(--text-primary);
+}
+
+.sortIcon {
+  font-size: 9px;
+  color: var(--accent-gold);
+}
+
+.thFilter {
+  margin-top: 4px;
+}
+
+.thFilterInput {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 6px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.thFilterInput:focus {
+  border-color: var(--accent-gold);
+}
+
+.thFilterInput::placeholder {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.releaseTable tbody tr {
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.releaseTable tbody tr:last-child {
+  border-bottom: none;
+}
+
+.releaseTable tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.releaseRowSelected {
+  background: rgba(201, 168, 76, 0.1) !important;
+}
+
+.tdCheck {
+  padding: 6px 6px 6px 12px;
+  vertical-align: middle;
+}
+
+.tdCheck input {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--accent-gold);
+}
+
+.tdTitle {
+  padding: 6px 10px;
+  max-width: 260px;
+}
+
+.releaseTitleText {
+  color: var(--text-primary);
+  font-weight: 500;
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.releaseRejected {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--error);
+  vertical-align: middle;
+  cursor: help;
+}
+
+.td {
+  padding: 6px 10px;
+  color: var(--text-muted);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tdNumeric {
+  padding: 6px 10px;
+  color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.qualityBadge {
+  display: inline-block;
+  background: rgba(201, 168, 76, 0.12);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  border-radius: 3px;
+  color: var(--accent-gold);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 5px;
+}
+
+.scorePos {
+  color: var(--success);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.scoreNeg {
+  color: var(--error);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.customFormats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 180px;
+}
+
+.cfTag {
+  display: inline-block;
+  background: rgba(147, 112, 219, 0.15);
+  border: 1px solid rgba(147, 112, 219, 0.3);
+  border-radius: 3px;
+  color: var(--accent-purple);
+  font-size: 9px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.cfMore {
+  font-size: 9px;
+  color: var(--text-muted);
+  padding: 1px 3px;
+}
+
+.seeders {
+  color: var(--success);
+}
+
+.rejectedReason {
+  color: var(--error);
+  font-size: 10px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  white-space: nowrap;
+}
+
+/* ── Pagination ─────────────────────────────────────────── */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.paginationInfo {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.paginationControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pageBtn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: border-color 0.1s, background 0.1s;
+}
+
+.pageBtn:hover:not(:disabled) {
+  border-color: var(--accent-gold);
+  background: var(--accent-gold-glow);
+}
+
+.pageBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.pageNum {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 50px;
+  text-align: center;
+}
+
+.pageSizeSelect {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+  outline: none;
+}
+
+.pageSizeSelect:focus {
+  border-color: var(--accent-gold);
+}
+
+/* ── Release toolbar (above table) ────────────────────── */
+.releaseToolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.approvedToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.approvedToggle input[type='checkbox'] {
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+  accent-color: var(--success);
+}
+
+.approvedToggle:hover {
+  color: var(--text-primary);
+}
+
+/* ── Format badge ──────────────────────────────────────── */
+.formatBadge {
+  display: inline-block;
+  background: rgba(100, 160, 220, 0.12);
+  border: 1px solid rgba(100, 160, 220, 0.28);
+  border-radius: 3px;
+  color: #7ab3d8;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 5px;
+}
+
+/* ── Status pill ──────────────────────────────────────── */
+.tdStatus {
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.statusApproved {
+  display: inline-block;
+  background: rgba(76, 175, 80, 0.12);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 3px;
+  color: var(--success);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+}
+
+.statusRejected {
+  display: inline-block;
+  background: rgba(158, 76, 76, 0.12);
+  border: 1px solid rgba(158, 76, 76, 0.3);
+  border-radius: 3px;
+  color: var(--error);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  cursor: help;
+}
