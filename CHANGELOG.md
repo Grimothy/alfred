@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.0](https://github.com/Grimothy/alfred/compare/alfred-v1.3.0...alfred-v1.4.0) (2026-04-14)
+
+
+### Features
+
+* add default quality profile and library folder settings for Sonarr and Radarr ([977841c](https://github.com/Grimothy/alfred/commit/977841c7383a57b9a263715930a51309e2d72bf1))
+* add interactive search for Sonarr/Radarr with Quick Add and release picker ([22b52a4](https://github.com/Grimothy/alfred/commit/22b52a4a96c3cc7507f0e1fc65a997d169b99928))
+* add RequestModal for batch requesting items to Sonarr/Radarr with settings defaults ([217c2c1](https://github.com/Grimothy/alfred/commit/217c2c14d2e4e64b3ebf19f56652ba7580e78fc3))
+* redesign RequestModal with search-first flow, add item selection and request status tracking ([44587d8](https://github.com/Grimothy/alfred/commit/44587d8676a6d6e815a359a63363ec4bf6be173e))
+
 ## [1.3.0](https://github.com/Grimothy/alfred/compare/alfred-v1.2.0...alfred-v1.3.0) (2026-04-12)
 
 
