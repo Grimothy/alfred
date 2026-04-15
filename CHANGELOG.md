@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/Grimothy/alfred/compare/alfred-v1.5.0...alfred-v1.5.1) (2026-04-15)
+
+
+### Bug Fixes
+
+* interactive search for TMDB-only series and season progress display ([586f020](https://github.com/Grimothy/alfred/commit/586f020a6bb84796e2f526c684fac0e02c0a0240))
+
 ## [1.5.0](https://github.com/Grimothy/alfred/compare/alfred-v1.4.0...alfred-v1.5.0) (2026-04-14)
 
 
