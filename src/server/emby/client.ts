@@ -300,7 +300,7 @@ export class EmbyClient {
       }
       for (const season of seasons) {
         season.EpisodesInSeason = countBySeason.get(season.SeasonNumber) ?? 0
-        season.EpisodeCount = season.EpisodesInSeason
+        // EpisodeCount (from ChildCount) stays as the canonical total for the season
       }
       item.Seasons = seasons
     }
@@ -333,8 +333,8 @@ export class EmbyClient {
       }
       for (const season of seasons) {
         season.EpisodesInSeason = countBySeason.get(season.SeasonNumber) ?? 0
-        // EpisodeCount = what Emby has (no external total available from this endpoint)
-        season.EpisodeCount = season.EpisodesInSeason
+        // EpisodeCount (from ChildCount) stays as the canonical total for the season
+        // so partial seasons show the correct X/Y progress
       }
       item.Seasons = seasons
     }
@@ -353,6 +353,55 @@ export class EmbyClient {
     await this.http.post('/emby/Library/Refresh', null, {
       timeout: 60_000,
     })
+  }
+
+  async waitForLibraryRefresh(
+    timeoutMs = 300_000,
+    pollIntervalMs = 3_000,
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      try {
+        const res = await this.http.get('/emby/ScheduledTasks', {
+          timeout: 10_000,
+        })
+        const raw = res.data
+        const tasks: Array<{
+          Key: string
+          Name: string
+          Category: string
+          State: string
+        }> = Array.isArray(raw) ? raw : (raw?.Items ?? [])
+
+        const scanTask = tasks.find(
+          (t) =>
+            (t.Key === 'RefreshLibrary' ||
+              t.Key?.includes('RefreshLibrary') ||
+              t.Key?.includes('ScanLibrary') ||
+              t.Name?.toLowerCase().includes('scan library') ||
+              t.Name?.toLowerCase().includes('refresh library')) &&
+            t.Category === 'Library',
+        )
+
+        if (!scanTask || scanTask.State !== 'Running') {
+          return
+        }
+      } catch (err) {
+        let msg = 'unknown'
+        if (err && typeof err === 'object' && 'message' in err) {
+          msg = (err as { message: string }).message
+        }
+        const axiosErr = err as { response?: { status?: number; statusText?: string; data?: unknown } }
+        const status = axiosErr?.response?.status
+        const data = axiosErr?.response?.data
+        console.warn(`[emby] ScheduledTasks poll failed${status ? ` (HTTP ${status})` : ''}: ${msg}${data ? ` — ${JSON.stringify(data)}` : ''} — proceeding with sync`)
+        return
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+    }
+
+    console.warn('[emby] Library refresh timed out after 5 minutes — proceeding with sync anyway')
   }
 }
 

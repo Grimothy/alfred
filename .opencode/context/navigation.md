@@ -47,6 +47,7 @@
 - **Sonarr/Radarr integration**: uses shared `RequestModal` component (same as CollectionDetail); supports both Quick Add and Interactive Search flows
 - **Quick Add**: quality profile + root folder selectors (saved defaults pre-filled); submits directly
 - **Interactive Search**: for each item — silently adds to Sonarr/Radarr (no download), then fetches `GET /api/v3/release?movieId=X` or `?seriesId=X`, displays release picker (quality, size, indexer, seeders), user selects releases, `POST /api/v3/release` to queue downloads
+- **Season-scoped Sonarr requests**: "Request Season N" (missing season) → add series with only season N monitored + searched; "Request Missing" (partial season) → add series with all seasons monitored, let Sonarr fill gaps; season context shown in modal header
 - For TMDB TV items: resolves tvdbId via Sonarr lookup before opening modal
 - Back navigation via `navigate(-1)`
   - TMDB items not yet in Emby: navigated via `?source=tmdb&tmdbId=X&type=Y&name=Z&year=W` params
@@ -61,7 +62,7 @@
 | Toggle | checked, onChange, disabled? |
 | Card | children, className?, accent? |
 | CollectionEditor | open, collection?, onClose — full create/edit drawer (480px) |
-| RequestModal | open, clientType, items, onClose, onSuccess — Sonarr/Radarr batch request modal with quality profile + root folder pickers |
+| RequestModal | open, clientType, items, onClose, onSuccess — Sonarr/Radarr batch request modal with quality profile + root folder pickers; season-scoped requests show season context in header and item rows |
 | RemoveItemModal | open, item: EmbyItem, onClose, onRemoveFromCollection, onRemoveFromArrAndCollection, loading, error — confirms removal from collections; "Remove from [Radarr/Sonarr]" disabled if no provider ID |
 
 ## API (src/client/api/index.ts)
@@ -73,7 +74,7 @@ Key functions and return types:
 - `toggleTmdbMatches(id, include)` → void  (TMDB-backed collections only)
 - `deleteCollection(id)` → void
 - `previewCollectionById(id, refresh?)` → `{ count, items }` | `ExpandedPreviewResponse` (see below)
-- `getSyncStatus()` → `SyncStatus`
+- `getSyncStatus()` → `SyncStatus` — `{ running, phase?: 'idle'|'refreshing'|'syncing', latest }`; `phase` indicates whether a running sync is in the Emby library refresh phase or the collection sync phase
 - `triggerSync()` → void
 - `getItemDetail(id, tmdbId?)` → `EmbyItemDetail` (full item with seasons for series; pass tmdbId to resolve via TMDB provider ID)
 - `getTmdbDetail(tmdbId, type)` → `TmdbTvDetail | TmdbMovieDetail` (full TMDB metadata for items not in Emby)
@@ -83,9 +84,11 @@ Key functions and return types:
 - `addRadarrMovie(opts)` → Radarr movie
 - `getSonarrQualityProfiles()`, `getSonarrRootFolders()`, `getSonarrSeries()`
 - `getRadarrQualityProfiles()`, `getRadarrRootFolders()`, `getRadarrMovies()`
-- `getSonarrReleases(seriesId)` → `SonarrRelease[]` (interactive search results from indexers)
+- `getSonarrEpisodes(seriesId, seasonNumber)` → `SonarrEpisode[]` (`{ id, episodeNumber, seasonNumber, title, hasFile, monitored, airDate? }`); fetches episode list for a season
+- `getSonarrReleases(seriesId, seasonNumber?, episodeId?)` → `SonarrRelease[]` (interactive search results; `episodeId` scopes to single episode; `seasonNumber` scopes to season; when `episodeId` set, `seasonNumber` omitted)
 - `getRadarrReleases(movieId)` → `RadarrRelease[]` (interactive search results from indexers)
 - `downloadSonarrRelease(opts)` → queues a specific release for download
+- `updateSonarrSeasonMonitoring(seriesId, seasons)` → updates season monitoring flags on an existing Sonarr series
 - `downloadRadarrRelease(opts)` → queues a specific release for download
 - `discoverTmdb(filters)` → `{ page, total_pages, total_results, results: TmdbDiscoverResult[] }` (TMDB discover for custom collections)
 - `getCollectionItems(id)` → `{ emby: EmbyItem[], tmdb: TmdbDiscoveryItem[] }` (custom collections)
@@ -144,10 +147,12 @@ Key types:
 - `GET /api/sonarr/rootfolders` — list root folders
 - `GET /api/sonarr/lookup?term=` — search series by term
 - `GET /api/sonarr/series` — list all series in Sonarr
-- `POST /api/sonarr/series` — add series; body: `{ tvdbId, seasonStatuses?, qualityProfileId?, rootFolderPath? }`; `seasonStatuses` for partial season monitoring
+- `POST /api/sonarr/series` — add series; body: `{ tvdbId, seasonStatuses?, qualityProfileId?, rootFolderPath?, search? }`; `seasonStatuses` for partial season monitoring; on 409 (already exists), updates season monitoring if `seasonStatuses` provided
 - `DELETE /api/sonarr/series/:tvdbId` — delete series and associated files from Sonarr; `?deleteFiles=true` (default)
 - `GET /api/sonarr/series/:tvdbId/exists` — check if series exists in Sonarr by TVDB ID; returns `{ exists: bool, id?: number }`
-- `GET /api/sonarr/releases?seriesId=X` — fetch available releases from indexers (interactive search)
+- `GET /api/sonarr/episodes?seriesId=X&seasonNumber=Y` — list episodes for a season; returns `[{ id, episodeNumber, seasonNumber, title, hasFile, monitored, airDate? }]`
+- `GET /api/sonarr/releases?seriesId=X&seasonNumber=Y&episodeId=Z` — fetch available releases; `episodeId` (optional) scopes to a single episode; `seasonNumber` scopes to a season; when `episodeId` is provided, `seasonNumber` is omitted
+- `PUT /api/sonarr/series/:seriesId/seasons` — update season monitoring flags on an existing series; body: `{ seasons: [{ seasonNumber, monitored }] }`
 - `POST /api/sonarr/releases` — download a specific release; body: `{ guid, seriesId, qualityProfileId?, episodeIds? }`
 
 ### Radarr API (`/api/radarr`)

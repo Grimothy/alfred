@@ -43,6 +43,7 @@ export interface Collection {
 
 export interface SyncStatus {
   running: boolean
+  phase?: 'idle' | 'refreshing' | 'syncing'
   latest: SyncHistoryItem | null
 }
 
@@ -263,6 +264,9 @@ export interface AddSonarrSeriesOptions {
 export const addSonarrSeries = (payload: AddSonarrSeriesOptions) =>
   api.post<SonarrSeriesItem>('/sonarr/series', payload).then((r) => r.data)
 
+export const getSonarrSeriesById = (id: number) =>
+  api.get<SonarrSeriesItem>(`/sonarr/series/${id}`).then((r) => r.data)
+
 export interface SonarrBatchItem {
   tvdbId: number
   title?: string
@@ -405,6 +409,7 @@ export const getRadarrQueue = () =>
 
 export interface RadarrRelease {
   guid: string
+  title: string
   quality: { quality: { name: string; source: string; resolution: number }; revision?: unknown }
   customFormats: string[]
   customFormatScore: number
@@ -431,8 +436,19 @@ export const downloadRadarrRelease = (payload: { guid: string; indexerId: number
 
 // ── Sonarr Interactive Search (Releases) ────────────────────────────────────────
 
+export interface SonarrEpisode {
+  id: number
+  episodeNumber: number
+  seasonNumber: number
+  title: string
+  hasFile: boolean
+  monitored: boolean
+  airDate: string | null
+}
+
 export interface SonarrRelease {
   guid: string
+  title: string
   quality: { quality: { name: string; source: string; resolution: number }; revision?: unknown }
   customFormats: string[]
   customFormatScore: number
@@ -452,11 +468,19 @@ export interface SonarrRelease {
   episodes: { episodeId: number; seasonNumber: number; episodeNumber: number }[]
 }
 
-export const getSonarrReleases = (seriesId: number) =>
-  api.get<SonarrRelease[]>('/sonarr/releases', { params: { seriesId } }).then((r) => r.data)
+export const getSonarrEpisodes = (seriesId: number, seasonNumber: number) =>
+  api.get<SonarrEpisode[]>('/sonarr/episodes', { params: { seriesId, seasonNumber } }).then((r) => r.data)
+
+export const getSonarrReleases = (seriesId: number, seasonNumber?: number, episodeId?: number) =>
+  api.get<SonarrRelease[]>('/sonarr/releases', {
+    params: { seriesId, ...(episodeId !== undefined ? { episodeId } : seasonNumber !== undefined ? { seasonNumber } : {}) }
+  }).then((r) => r.data)
 
 export const downloadSonarrRelease = (payload: { guid: string; indexerId: number; seriesId: number; qualityProfileId?: number; episodeIds?: number[] }) =>
   api.post('/sonarr/releases', payload).then((r) => r.data)
+
+export const updateSonarrSeasonMonitoring = (seriesId: number, seasons: { seasonNumber: number; monitored: boolean }[]) =>
+  api.put(`/sonarr/series/${seriesId}/seasons`, { seasons }).then((r) => r.data)
 
 export interface TmdbCompanyResult {
   id: number

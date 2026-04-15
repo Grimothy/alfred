@@ -432,3 +432,140 @@
   border-radius: var(--radius-sm);
   padding: 8px 10px;
 }
+
+/* ── Expand chevron button ─────────────────────────────────── */
+.expandBtn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 9px;
+  cursor: pointer;
+  padding: 4px 6px;
+  transition: color 0.12s ease;
+  flex-shrink: 0;
+}
+.expandBtn:hover { color: var(--text-primary); }
+.expandBtn:disabled { opacity: 0.4; cursor: default; }
+
+/* ── Episode accordion ─────────────────────────────────────── */
+.episodeList {
+  border-top: 1px solid var(--border-subtle);
+  padding: 12px 16px 12px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.episodeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.episodeInfo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.episodeNumber {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--accent-gold);
+  flex-shrink: 0;
+}
+
+.episodeTitle {
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.episodeAirDate {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.episodeLoading,
+.episodeError,
+.episodeHint {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 12px;
+}
+
+.episodeError {
+  color: var(--error);
+}
+
+.episodeLoading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Episode row available state ─────────────────────────── */
+.episodeRowAvailable {
+  border-color: rgba(92, 158, 110, 0.2);
+}
+
+.episodeNumberAvailable {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+.episodeNumberMissing {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--error);
+  flex-shrink: 0;
+}
+
+.episodeStatusAvailable {
+  font-size: 12px;
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+.episodeStatusMissing {
+  font-size: 12px;
+  color: var(--error);
+  flex-shrink: 0;
+}
+
+/* ── Episode list footer ────────────────────────────────── */
+.episodeListFooter {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 4px;
+}
+
+/* ── Spinner ─────────────────────────────────────────────── */
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(201, 168, 76, 0.2);
+  border-top-color: var(--accent-gold);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

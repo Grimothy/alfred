@@ -131,13 +131,20 @@
 
 .itemRow {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 12px;
+  gap: 2px;
 }
 .itemRow:last-child { border-bottom: none; }
+
+.itemRowMain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
 
 .itemName {
   color: var(--text-primary);
@@ -146,13 +153,20 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-right: 10px;
 }
 
 .itemYear {
   color: var(--text-muted);
   font-size: 10px;
   flex-shrink: 0;
+}
+
+.itemSeasonContext {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .itemMore {
@@ -777,4 +791,139 @@
   letter-spacing: 0.04em;
   padding: 2px 6px;
   cursor: help;
+}
+
+/* ── Per-episode step-through ──────────────────────────── */
+.episodeHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.episodeProgress {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.episodeProgressDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  display: inline-block;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.episodeProgressDotActive {
+  background: var(--accent-gold);
+  border-color: var(--accent-gold);
+  width: 10px;
+  height: 10px;
+}
+
+.episodeProgressDotDone {
+  background: var(--success, #4caf50);
+  border-color: var(--success, #4caf50);
+}
+
+.episodeTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent-gold);
+  border-radius: var(--radius-sm);
+}
+
+.episodeCode {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-gold);
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.episodeName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Summary step ──────────────────────────────────────── */
+.summaryList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.summaryRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+
+.summaryRow:last-child {
+  border-bottom: none;
+}
+
+.summaryEpisodeCode {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-gold);
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  min-width: 70px;
+}
+
+.summaryEpisodeName {
+  color: var(--text-primary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summarySelected {
+  display: inline-block;
+  background: rgba(76, 175, 80, 0.12);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 3px;
+  color: var(--success, #4caf50);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
+.summarySkipped {
+  display: inline-block;
+  background: rgba(92, 90, 84, 0.15);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  flex-shrink: 0;
 }

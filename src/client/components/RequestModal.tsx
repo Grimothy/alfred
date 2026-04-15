@@ -12,23 +12,42 @@ import {
   addRadarrMovie,
   getRadarrReleases,
   getSonarrReleases,
+  getSonarrEpisodes,
+  getSonarrSeriesById,
   downloadRadarrRelease,
   downloadSonarrRelease,
   checkRadarrMovieExists,
   checkSonarrSeriesExists,
+  updateSonarrSeasonMonitoring,
   SonarrBatchItem,
   RadarrBatchItem,
   SonarrBatchResult,
   RadarrBatchResult,
   RadarrRelease,
   SonarrRelease,
+  SonarrEpisode,
 } from '../api'
 import Button from './Button'
 import styles from './RequestModal.module.css'
 
 type ClientType = 'sonarr' | 'radarr'
 type ModalMode = 'select' | 'quick-add' | 'interactive-setup' | 'interactive-search'
-type InteractiveStep = 'adding' | 'releases'
+// For Sonarr with season context: 'adding' → 'episode-releases' (step through episodes) → 'summary'
+// For Radarr or no season context: 'adding' → 'releases'
+type InteractiveStep = 'adding' | 'releases' | 'episode-releases' | 'summary'
+
+interface MissingEpisode {
+  id: number
+  episodeNumber: number
+  seasonNumber: number
+  title: string
+}
+
+interface EpisodeReleaseSelection {
+  episode: MissingEpisode
+  selectedGuid: string | null // null = skipped
+  releases: ReleaseDisplay[]
+}
 
 interface EmbyItemLike {
   Id?: string
@@ -36,6 +55,11 @@ interface EmbyItemLike {
   Type?: string
   ProductionYear?: number
   ProviderIds?: { Imdb?: string; IMDB?: string; Tvdb?: string; TVDB?: string; Tmdb?: string; TMDB?: string }
+  _season?: number
+  _partial?: boolean
+  _episodeId?: number
+  _missingCount?: number
+  _sonarrId?: number
 }
 
 interface TmdbItemLike {
@@ -45,6 +69,11 @@ interface TmdbItemLike {
   year?: number | null
   imdb_id?: string | null
   tvdb_id?: number | null
+  _season?: number
+  _partial?: boolean
+  _episodeId?: number
+  _missingCount?: number
+  _sonarrId?: number
 }
 
 type RequestItem = EmbyItemLike | TmdbItemLike
@@ -63,6 +92,11 @@ interface ItemDisplay {
   year?: number
   type: string
   providerId: string
+  seasonNumber?: number
+  isPartial?: boolean
+  episodeId?: number
+  missingCount?: number
+  sonarrId?: number
 }
 
 interface ReleaseDisplay {
@@ -85,6 +119,7 @@ interface ReleaseDisplay {
   customFormats: string[]
   movieId?: number
   seriesId?: number
+  episodeId?: number
 }
 
 function normalizeCustomFormats(
@@ -120,28 +155,34 @@ function extractItems(items: RequestItem[], clientType: ClientType): ItemDisplay
       return false
     })
     .map((item) => {
+      const seasonNumber = '_season' in item ? (item as EmbyItemLike & { _season?: number })._season : undefined
+      const isPartial = '_partial' in item ? (item as EmbyItemLike & { _partial?: boolean })._partial : undefined
+      const episodeId = '_episodeId' in item ? (item as EmbyItemLike & { _episodeId?: number })._episodeId : undefined
+      const missingCount = '_missingCount' in item ? (item as EmbyItemLike & { _missingCount?: number })._missingCount : undefined
+      const sonarrId = '_sonarrId' in item ? (item as EmbyItemLike & { _sonarrId?: number })._sonarrId : undefined
+
       if ('_tmdbId' in item) {
         const tmdbItem = item as TmdbItemLike & { _tmdbId: number }
         if (clientType === 'radarr') {
-          return { id: String(tmdbItem._tmdbId), name: tmdbItem.name ?? '', year: tmdbItem.year ?? undefined, type: 'Movie', providerId: String(tmdbItem._tmdbId) } as ItemDisplay
+          return { id: String(tmdbItem._tmdbId), name: tmdbItem.name ?? '', year: tmdbItem.year ?? undefined, type: 'Movie', providerId: String(tmdbItem._tmdbId), seasonNumber, isPartial, episodeId, missingCount, sonarrId } as ItemDisplay
         } else {
-          return { id: String(tmdbItem._tmdbId), name: tmdbItem.name ?? '', year: tmdbItem.year ?? undefined, type: 'Series', providerId: String(tmdbItem.tvdb_id ?? tmdbItem._tmdbId) } as ItemDisplay
+          return { id: String(tmdbItem._tmdbId), name: tmdbItem.name ?? '', year: tmdbItem.year ?? undefined, type: 'Series', providerId: String(tmdbItem.tvdb_id ?? tmdbItem._tmdbId), seasonNumber, isPartial, episodeId, missingCount, sonarrId } as ItemDisplay
         }
       } else if ('Id' in item) {
         const embyItem = item as EmbyItemLike
         if (clientType === 'radarr') {
           const tmdbId = embyItem.ProviderIds?.Tmdb ?? embyItem.ProviderIds?.TMDB
-          return { id: embyItem.Id ?? '', name: embyItem.Name ?? '', year: embyItem.ProductionYear, type: embyItem.Type ?? '', providerId: String(tmdbId ?? '') } as ItemDisplay
+          return { id: embyItem.Id ?? '', name: embyItem.Name ?? '', year: embyItem.ProductionYear, type: embyItem.Type ?? '', providerId: String(tmdbId ?? ''), seasonNumber, isPartial, episodeId, missingCount, sonarrId } as ItemDisplay
         } else {
           const tvdbId = embyItem.ProviderIds?.Tvdb ?? embyItem.ProviderIds?.TVDB
-          return { id: embyItem.Id ?? '', name: embyItem.Name ?? '', year: embyItem.ProductionYear, type: embyItem.Type ?? '', providerId: String(tvdbId ?? '') } as ItemDisplay
+          return { id: embyItem.Id ?? '', name: embyItem.Name ?? '', year: embyItem.ProductionYear, type: embyItem.Type ?? '', providerId: String(tvdbId ?? ''), seasonNumber, isPartial, episodeId, missingCount, sonarrId } as ItemDisplay
         }
       } else {
         const tmdbItem = item as TmdbItemLike
         if (clientType === 'radarr') {
-          return { id: String(tmdbItem.id), name: tmdbItem.name ?? '', year: tmdbItem.year ?? undefined, type: 'Movie', providerId: String(tmdbItem.id) } as ItemDisplay
+          return { id: String(tmdbItem.id), name: tmdbItem.name ?? '', year: tmdbItem.year ?? undefined, type: 'Movie', providerId: String(tmdbItem.id), seasonNumber, isPartial, episodeId, missingCount, sonarrId } as ItemDisplay
         } else {
-          return { id: String(tmdbItem.id), name: tmdbItem.name ?? '', year: tmdbItem.year ?? undefined, type: 'Series', providerId: String(tmdbItem.tvdb_id ?? tmdbItem.id) } as ItemDisplay
+          return { id: String(tmdbItem.id), name: tmdbItem.name ?? '', year: tmdbItem.year ?? undefined, type: 'Series', providerId: String(tmdbItem.tvdb_id ?? tmdbItem.id), seasonNumber, isPartial, episodeId, missingCount, sonarrId } as ItemDisplay
         }
       }
     })
@@ -173,6 +214,15 @@ export default function RequestModal({
   const [addingProgress, setAddingProgress] = useState('')
   const [allReleases, setAllReleases] = useState<ReleaseDisplay[]>([])
   const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
+
+  // Per-episode step-through state (Sonarr with season context)
+  const [episodeSelections, setEpisodeSelections] = useState<EpisodeReleaseSelection[]>([])
+  const [currentEpisodeIdx, setCurrentEpisodeIdx] = useState(0)
+  const [currentEpisodeReleases, setCurrentEpisodeReleases] = useState<ReleaseDisplay[]>([])
+  const [currentEpisodeLoading, setCurrentEpisodeLoading] = useState(false)
+  const [currentEpisodeError, setCurrentEpisodeError] = useState<string | null>(null)
+  // Resolved Sonarr internal ID (from add/lookup during interactive search)
+  const [interactiveSonarrId, setInteractiveSonarrId] = useState<number | null>(null)
 
   // Release table: sort
   type SortCol = 'title' | 'quality' | 'resolution' | 'size' | 'customFormatScore' | 'indexer' | 'seeders' | 'leechers'
@@ -240,6 +290,12 @@ export default function RequestModal({
       setFilterApprovedOnly(false)
       setPage(0)
       setPageSize(25)
+      setEpisodeSelections([])
+      setCurrentEpisodeIdx(0)
+      setCurrentEpisodeReleases([])
+      setCurrentEpisodeLoading(false)
+      setCurrentEpisodeError(null)
+      setInteractiveSonarrId(null)
     }
   }, [open])
 
@@ -289,10 +345,18 @@ export default function RequestModal({
       let requestedIds: number[] = []
 
       if (clientType === 'sonarr') {
-        const batchItems: SonarrBatchItem[] = displayItems.map((item) => ({
-          tvdbId: parseInt(item.providerId, 10),
-          title: item.name,
-        }))
+        const batchItems: SonarrBatchItem[] = displayItems.map((item) => {
+          let seasonStatuses: { seasonNumber: number; monitored: boolean }[] | undefined
+          // Always scope to the season when a season number is present — partial or not
+          if (item.seasonNumber !== undefined) {
+            seasonStatuses = [{ seasonNumber: item.seasonNumber, monitored: true }]
+          }
+          return {
+            tvdbId: parseInt(item.providerId, 10),
+            title: item.name,
+            seasonStatuses,
+          }
+        })
         result = await requestSonarrBatch({
           items: batchItems,
           qualityProfileId: qualityProfileId ?? undefined,
@@ -329,6 +393,54 @@ export default function RequestModal({
     }
   }
 
+  // Helper: map a SonarrRelease or RadarrRelease into a ReleaseDisplay
+  function mapSonarrRelease(rel: SonarrRelease, seriesId: number, episodeId?: number): ReleaseDisplay {
+    return {
+      guid: rel.guid,
+      quality: rel.quality.quality.name,
+      source: rel.quality.quality.source ?? '',
+      resolution: rel.quality.quality.resolution ?? 0,
+      size: rel.size,
+      sizeFormatted: formatSize(rel.size),
+      indexer: rel.indexer,
+      indexerId: rel.indexerId ?? 0,
+      seeders: rel.seeders,
+      leechers: rel.leechers,
+      title: rel.title,
+      approved: rel.approved,
+      rejected: rel.rejected,
+      rejectedReason: rel.rejectedReason ?? '',
+      customFormatScore: rel.customFormatScore ?? 0,
+      releaseGroup: rel.releaseGroup ?? '',
+      customFormats: normalizeCustomFormats(rel.customFormats),
+      seriesId,
+      episodeId,
+    }
+  }
+
+  function mapRadarrRelease(rel: RadarrRelease, movieId: number): ReleaseDisplay {
+    return {
+      guid: rel.guid,
+      quality: rel.quality.quality.name,
+      source: rel.quality.quality.source ?? '',
+      resolution: rel.quality.quality.resolution ?? 0,
+      size: rel.size,
+      sizeFormatted: formatSize(rel.size),
+      indexer: rel.indexer,
+      indexerId: rel.indexerId ?? 0,
+      seeders: rel.seeders,
+      leechers: rel.leechers,
+      title: rel.title,
+      approved: rel.approved,
+      rejected: rel.rejected,
+      rejectedReason: rel.rejectedReason ?? '',
+      customFormatScore: rel.customFormatScore ?? 0,
+      releaseGroup: rel.releaseGroup ?? '',
+      customFormats: normalizeCustomFormats(rel.customFormats),
+      movieId,
+    }
+  }
+
   // Interactive search: add items silently, then fetch releases
   async function startInteractiveSearch() {
     setMode('interactive-search')
@@ -337,16 +449,32 @@ export default function RequestModal({
     setAddingProgress('Adding items…')
     setAllReleases([])
     setSelectedGuids(new Set())
+    setEpisodeSelections([])
+    setCurrentEpisodeIdx(0)
+    setCurrentEpisodeReleases([])
+    setCurrentEpisodeError(null)
+    setInteractiveSonarrId(null)
     setPage(0)
 
     try {
-      const addedIds: { providerId: number; internalId: number; title: string }[] = []
-
       if (clientType === 'sonarr') {
-        for (let i = 0; i < displayItems.length; i++) {
-          const item = displayItems[i]
-          setAddingProgress(`Adding ${item.name}… (${i + 1}/${displayItems.length})`)
-          const tvdbId = parseInt(item.providerId, 10)
+        // ── Sonarr: add series silently, then step through missing episodes ──
+        const item = displayItems[0]
+        if (!item) { setInteractiveError('No item to search'); setInteractiveStep('releases'); return }
+
+        const tvdbId = parseInt(item.providerId, 10)
+        let internalId = 0
+
+        // If we already have the Sonarr internal ID (pre-resolved in MediaDetail), skip the add entirely
+        if (item.sonarrId) {
+          internalId = item.sonarrId
+          setInteractiveSonarrId(internalId)
+        } else {
+          setAddingProgress(`Adding ${item.name} to Sonarr…`)
+          let seasonStatuses: { seasonNumber: number; monitored: boolean }[] | undefined
+          if (item.seasonNumber !== undefined) {
+            seasonStatuses = [{ seasonNumber: item.seasonNumber, monitored: true }]
+          }
           try {
             const added = await addSonarrSeries({
               tvdbId,
@@ -354,22 +482,154 @@ export default function RequestModal({
               qualityProfileId: qualityProfileId ?? undefined,
               rootFolderPath: rootFolderPath || undefined,
               search: false,
+              seasonStatuses,
             })
-            addedIds.push({ providerId: tvdbId, internalId: added.id, title: item.name })
-          } catch {
-            try {
-              const exists = await checkSonarrSeriesExists(tvdbId)
-              addedIds.push({ providerId: tvdbId, internalId: exists.id ?? 0, title: item.name })
-            } catch {
-              addedIds.push({ providerId: tvdbId, internalId: 0, title: item.name })
+            internalId = added.id
+          } catch (err) {
+            const axiosErr = err as { response?: { status?: number; data?: { error?: string } } }
+            const errMsg = axiosErr?.response?.data?.error ?? ''
+            const isAlreadyExists =
+              axiosErr?.response?.status === 409 ||
+              errMsg.toLowerCase().includes('already') ||
+              errMsg.toLowerCase().includes('exists')
+            if (isAlreadyExists) {
+              try {
+                const exists = await checkSonarrSeriesExists(tvdbId)
+                internalId = exists.id ?? 0
+                if (internalId && item.seasonNumber !== undefined) {
+                  await updateSonarrSeasonMonitoring(internalId, [{ seasonNumber: item.seasonNumber, monitored: true }])
+                }
+                // Clear the "already added" error — we recovered successfully
+                setInteractiveError(null)
+              } catch {
+                setInteractiveError('Series already exists but could not be looked up in Sonarr.')
+                setInteractiveStep('releases')
+                return
+              }
+            } else {
+              const msg = errMsg || 'Failed to add series to Sonarr.'
+              setInteractiveError(msg)
+              setInteractiveStep('releases')
+              return
             }
           }
+
+          if (!internalId) {
+            setInteractiveError('Could not determine Sonarr series ID. Check that the series exists in Sonarr.')
+            setInteractiveStep('releases')
+            return
+          }
+
+          setInteractiveSonarrId(internalId)
         }
+
+        // If a specific episodeId is set, just show that one episode's releases
+        if (item.episodeId !== undefined) {
+          setAddingProgress('Fetching releases…')
+          try {
+            const releases = await getSonarrReleases(internalId, item.seasonNumber, item.episodeId)
+            const mapped = releases.map((r) => mapSonarrRelease(r, internalId, item.episodeId))
+            setAllReleases(mapped)
+            setInteractiveStep('releases')
+          } catch {
+            setInteractiveError('Failed to fetch releases.')
+            setInteractiveStep('releases')
+          }
+          return
+        }
+
+        // Season context — fetch all episodes, filter missing, step through them one by one
+        if (item.seasonNumber !== undefined) {
+          setAddingProgress('Fetching episode list…')
+          let missingEps: MissingEpisode[] = []
+          try {
+            const eps: SonarrEpisode[] = await getSonarrEpisodes(internalId, item.seasonNumber)
+            missingEps = eps
+              .filter((ep) => !ep.hasFile)
+              .map((ep) => ({ id: ep.id, episodeNumber: ep.episodeNumber, seasonNumber: ep.seasonNumber, title: ep.title }))
+              .sort((a, b) => a.episodeNumber - b.episodeNumber)
+          } catch {
+            setInteractiveError('Failed to fetch episode list from Sonarr.')
+            setInteractiveStep('releases')
+            return
+          }
+
+          if (missingEps.length === 0) {
+            setInteractiveError('No missing episodes found for this season — all episodes are already on disk.')
+            setInteractiveStep('releases')
+            return
+          }
+
+          // Initialise selections array (all skipped to start)
+          const selections: EpisodeReleaseSelection[] = missingEps.map((ep) => ({
+            episode: ep,
+            selectedGuid: null,
+            releases: [],
+          }))
+          setEpisodeSelections(selections)
+          setCurrentEpisodeIdx(0)
+
+          // Fetch releases for the first episode
+          await loadEpisodeReleases(0, missingEps, internalId)
+          setInteractiveStep('episode-releases')
+          return
+        }
+
+        // No season context — fetch all seasons, collect all missing episodes across them
+        setAddingProgress('Fetching episode list…')
+        try {
+          const seriesInfo = await getSonarrSeriesById(internalId)
+          const seasonNumbers = (seriesInfo.seasons ?? [])
+            .map((s) => s.seasonNumber)
+            .filter((n) => n > 0)
+            .sort((a, b) => a - b)
+
+          if (seasonNumbers.length === 0) {
+            setInteractiveError('No seasons found for this series in Sonarr.')
+            setInteractiveStep('releases')
+            return
+          }
+
+          // Fetch episodes for all seasons in parallel
+          const allEpsArrays = await Promise.all(
+            seasonNumbers.map((sn) =>
+              getSonarrEpisodes(internalId, sn).catch(() => [] as SonarrEpisode[])
+            )
+          )
+          const missingEps: MissingEpisode[] = allEpsArrays
+            .flat()
+            .filter((ep) => !ep.hasFile)
+            .map((ep) => ({ id: ep.id, episodeNumber: ep.episodeNumber, seasonNumber: ep.seasonNumber, title: ep.title }))
+            .sort((a, b) => a.seasonNumber !== b.seasonNumber ? a.seasonNumber - b.seasonNumber : a.episodeNumber - b.episodeNumber)
+
+          if (missingEps.length === 0) {
+            setInteractiveError('No missing episodes found — all episodes are already on disk.')
+            setInteractiveStep('releases')
+            return
+          }
+
+          const selections: EpisodeReleaseSelection[] = missingEps.map((ep) => ({
+            episode: ep,
+            selectedGuid: null,
+            releases: [],
+          }))
+          setEpisodeSelections(selections)
+          setCurrentEpisodeIdx(0)
+          await loadEpisodeReleases(0, missingEps, internalId)
+          setInteractiveStep('episode-releases')
+        } catch {
+          setInteractiveError('Failed to fetch episode list from Sonarr.')
+          setInteractiveStep('releases')
+        }
+
       } else {
+        // ── Radarr: add movie silently, fetch releases ──
+        const releaseResults: ReleaseDisplay[] = []
         for (let i = 0; i < displayItems.length; i++) {
           const item = displayItems[i]
           setAddingProgress(`Adding ${item.name}… (${i + 1}/${displayItems.length})`)
           const tmdbId = parseInt(item.providerId, 10)
+          let internalId = 0
           try {
             const added = await addRadarrMovie({
               tmdbId,
@@ -377,85 +637,61 @@ export default function RequestModal({
               rootFolderPath: rootFolderPath || undefined,
               search: false,
             })
-            addedIds.push({ providerId: tmdbId, internalId: added.id, title: item.name })
+            internalId = added.id
           } catch {
             try {
               const exists = await checkRadarrMovieExists(tmdbId)
-              addedIds.push({ providerId: tmdbId, internalId: exists.id ?? 0, title: item.name })
+              internalId = exists.id ?? 0
             } catch {
-              addedIds.push({ providerId: tmdbId, internalId: 0, title: item.name })
+              // skip
             }
           }
-        }
-      }
-
-      setAddingProgress('Fetching releases…')
-
-      const releaseResults: ReleaseDisplay[] = []
-      for (const { internalId, title } of addedIds) {
-        if (!internalId) continue
-        try {
-          if (clientType === 'sonarr') {
-              const releases: SonarrRelease[] = await getSonarrReleases(internalId)
-              for (const rel of releases) {
-                releaseResults.push({
-                  guid: rel.guid,
-                  quality: rel.quality.quality.name,
-                  source: rel.quality.quality.source ?? '',
-                  resolution: rel.quality.quality.resolution ?? 0,
-                size: rel.size,
-                  sizeFormatted: formatSize(rel.size),
-                  indexer: rel.indexer,
-                  indexerId: rel.indexerId ?? 0,
-                  seeders: rel.seeders,
-                  leechers: rel.leechers,
-                  title,
-                  approved: rel.approved,
-                  rejected: rel.rejected,
-                  rejectedReason: rel.rejectedReason ?? '',
-                  customFormatScore: rel.customFormatScore ?? 0,
-                  releaseGroup: rel.releaseGroup ?? '',
-                  customFormats: normalizeCustomFormats(rel.customFormats),
-                  seriesId: internalId,
-              })
+          if (!internalId) continue
+          try {
+            const releases = await getRadarrReleases(internalId)
+            for (const rel of releases) {
+              releaseResults.push(mapRadarrRelease(rel, internalId))
             }
-          } else {
-              const releases: RadarrRelease[] = await getRadarrReleases(internalId)
-              for (const rel of releases) {
-                releaseResults.push({
-                  guid: rel.guid,
-                  quality: rel.quality.quality.name,
-                  source: rel.quality.quality.source ?? '',
-                  resolution: rel.quality.quality.resolution ?? 0,
-                size: rel.size,
-                  sizeFormatted: formatSize(rel.size),
-                  indexer: rel.indexer,
-                  indexerId: rel.indexerId ?? 0,
-                  seeders: rel.seeders,
-                  leechers: rel.leechers,
-                  title,
-                  approved: rel.approved,
-                  rejected: rel.rejected,
-                  rejectedReason: rel.rejectedReason ?? '',
-                  customFormatScore: rel.customFormatScore ?? 0,
-                  releaseGroup: rel.releaseGroup ?? '',
-                  customFormats: normalizeCustomFormats(rel.customFormats),
-                  movieId: internalId,
-              })
-            }
+          } catch {
+            // Skip fetch failures
           }
-        } catch {
-          // Skip fetch failures
         }
+        setAllReleases(releaseResults)
+        setInteractiveStep('releases')
       }
-
-      setAllReleases(releaseResults)
-      setInteractiveStep('releases')
     } catch (err) {
       setInteractiveError(
         (err as { message?: string })?.message ?? 'Failed to fetch releases'
       )
       setInteractiveStep('releases')
+    }
+  }
+
+  // Load releases for a specific episode (by index into episodeSelections/missingEps)
+  async function loadEpisodeReleases(
+    idx: number,
+    episodes: MissingEpisode[],
+    sonarrId: number
+  ) {
+    const ep = episodes[idx]
+    if (!ep) return
+    setCurrentEpisodeLoading(true)
+    setCurrentEpisodeError(null)
+    setCurrentEpisodeReleases([])
+    try {
+      const releases = await getSonarrReleases(sonarrId, ep.seasonNumber, ep.id)
+      const mapped = releases.map((r) => mapSonarrRelease(r, sonarrId, ep.id))
+      setCurrentEpisodeReleases(mapped)
+      // Sync into episodeSelections
+      setEpisodeSelections((prev) => {
+        const next = [...prev]
+        if (next[idx]) next[idx] = { ...next[idx], releases: mapped }
+        return next
+      })
+    } catch {
+      setCurrentEpisodeError('Failed to fetch releases for this episode.')
+    } finally {
+      setCurrentEpisodeLoading(false)
     }
   }
 
@@ -468,14 +704,83 @@ export default function RequestModal({
     })
   }
 
+  // Select a release for the current episode in per-episode mode, move to next
+  function selectEpisodeRelease(guid: string | null) {
+    const updated = episodeSelections.map((sel, i) =>
+      i === currentEpisodeIdx ? { ...sel, selectedGuid: guid } : sel
+    )
+    setEpisodeSelections(updated)
+
+    const nextIdx = currentEpisodeIdx + 1
+    if (nextIdx >= episodeSelections.length) {
+      // All episodes handled — show summary
+      setInteractiveStep('summary')
+    } else {
+      setCurrentEpisodeIdx(nextIdx)
+      // Load releases for next episode
+      const nextEp = updated[nextIdx]
+      if (nextEp && nextEp.releases.length === 0 && interactiveSonarrId) {
+        loadEpisodeReleases(
+          nextIdx,
+          updated.map((s) => s.episode),
+          interactiveSonarrId
+        )
+      } else {
+        setCurrentEpisodeReleases(nextEp?.releases ?? [])
+      }
+    }
+  }
+
+  function goToPrevEpisode() {
+    const prevIdx = currentEpisodeIdx - 1
+    if (prevIdx < 0) return
+    setCurrentEpisodeIdx(prevIdx)
+    const prevSel = episodeSelections[prevIdx]
+    setCurrentEpisodeReleases(prevSel?.releases ?? [])
+  }
+
   async function handleInteractiveSubmit() {
+    if (interactiveStep === 'summary') {
+      // Per-episode mode: download the selected release for each episode
+      const toDownload = episodeSelections.filter((s) => s.selectedGuid !== null)
+      if (toDownload.length === 0) { onClose(); return }
+      setSubmitting(true)
+      setInteractiveError(null)
+      try {
+        const downloadPromises: Promise<unknown>[] = []
+        for (const sel of toDownload) {
+          const rel = sel.releases.find((r) => r.guid === sel.selectedGuid)
+          if (!rel || !rel.seriesId) continue
+          downloadPromises.push(
+            downloadSonarrRelease({
+              guid: rel.guid,
+              indexerId: rel.indexerId,
+              seriesId: rel.seriesId,
+              qualityProfileId: qualityProfileId ?? undefined,
+              episodeIds: rel.episodeId ? [rel.episodeId] : undefined,
+            })
+          )
+        }
+        await Promise.allSettled(downloadPromises)
+        onSuccess(toDownload.length, 0, [])
+        onClose()
+      } catch (err) {
+        setInteractiveError(
+          (err as { message?: string })?.message ?? 'Failed to download releases'
+        )
+      } finally {
+        setSubmitting(false)
+      }
+      return
+    }
+
+    // Flat release table mode (single episode or Radarr)
     if (selectedGuids.size === 0) return
     setSubmitting(true)
     setInteractiveError(null)
 
     try {
       const downloadPromises: Promise<unknown>[] = []
-      const guids = Array.from(selectedGuids)
 
       for (const rel of allReleases) {
         if (!selectedGuids.has(rel.guid)) continue
@@ -486,6 +791,7 @@ export default function RequestModal({
               indexerId: rel.indexerId,
               seriesId: rel.seriesId,
               qualityProfileId: qualityProfileId ?? undefined,
+              episodeIds: rel.episodeId ? [rel.episodeId] : undefined,
             })
           )
         } else if (rel.movieId) {
@@ -514,7 +820,7 @@ export default function RequestModal({
 
   if (!open) return null
 
-  const isWide = mode === 'interactive-search' && interactiveStep === 'releases'
+  const isWide = mode === 'interactive-search' && (interactiveStep === 'releases' || interactiveStep === 'episode-releases' || interactiveStep === 'summary')
 
   function handleSort(col: SortCol) {
     if (sortCol === col) {
@@ -561,6 +867,55 @@ export default function RequestModal({
   const totalPages = Math.max(1, Math.ceil(filteredReleases.length / pageSize))
   const pagedReleases = filteredReleases.slice(page * pageSize, (page + 1) * pageSize)
 
+  const item0 = displayItems[0]
+  const hasSeasonContext = item0?.seasonNumber !== undefined && item0?.episodeId === undefined
+  const hasSingleEpisodeContext = item0?.episodeId !== undefined
+
+  // Human-readable context line shown under the series name
+  const seasonContextLabel: string | null = (() => {
+    if (!item0) return null
+    if (hasSingleEpisodeContext) {
+      return `Season ${item0.seasonNumber} — single episode search`
+    }
+    if (hasSeasonContext) {
+      const n = item0.missingCount
+      if (item0.isPartial) {
+        return n != null
+          ? `Season ${item0.seasonNumber} — ${n} missing episode${n !== 1 ? 's' : ''}`
+          : `Season ${item0.seasonNumber} — missing episodes`
+      }
+      return `Season ${item0.seasonNumber} — full season missing`
+    }
+    return null
+  })()
+
+  // Short label for the modal title bar
+  const seasonLabel = (() => {
+    if (!item0) return null
+    if (hasSingleEpisodeContext) return `S${String(item0.seasonNumber).padStart(2, '0')} — Episode`
+    if (hasSeasonContext) {
+      const n = item0.missingCount
+      if (item0.isPartial) {
+        return n != null
+          ? `Season ${item0.seasonNumber} — ${n} missing`
+          : `Season ${item0.seasonNumber} (partial)`
+      }
+      return `Season ${item0.seasonNumber}`
+    }
+    return null
+  })()
+
+  // What interactive search will do, shown on the mode card
+  const interactiveDesc = (() => {
+    if (hasSeasonContext && !hasSingleEpisodeContext) {
+      const n = item0?.missingCount
+      const count = n != null ? n : 'each missing'
+      return `Step through ${count} episode${n !== 1 ? 's' : ''} one by one — pick a release for each`
+    }
+    if (hasSingleEpisodeContext) return 'Search indexers for this specific episode'
+    return 'Pick specific releases from your indexers'
+  })()
+
   return (
     <div className={styles.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className={[styles.modal, isWide ? styles.modalWide : ''].filter(Boolean).join(' ')}>
@@ -579,7 +934,7 @@ export default function RequestModal({
             )}
           </div>
           <div>
-            <h2 className={styles.title}>Request to {clientLabel}</h2>
+            <h2 className={styles.title}>Request to {clientLabel}{seasonLabel ? ` — ${seasonLabel}` : ''}</h2>
             <p className={styles.subtitle}>
               {mode === 'select'
                 ? `${displayItems.length} item${displayItems.length !== 1 ? 's' : ''} selected`
@@ -587,6 +942,10 @@ export default function RequestModal({
                 ? `${displayItems.length} item${displayItems.length !== 1 ? 's' : ''}`
                 : interactiveStep === 'adding'
                 ? addingProgress
+                : interactiveStep === 'episode-releases'
+                ? `Episode ${currentEpisodeIdx + 1} of ${episodeSelections.length}`
+                : interactiveStep === 'summary'
+                ? `${episodeSelections.filter((s) => s.selectedGuid !== null).length} of ${episodeSelections.length} episodes queued`
                 : `${selectedGuids.size} release${selectedGuids.size !== 1 ? 's' : ''} selected`}
             </p>
           </div>
@@ -596,18 +955,23 @@ export default function RequestModal({
         {/* Body */}
         <div className={[styles.body, isWide ? styles.bodyWide : ''].filter(Boolean).join(' ')}>
           {/* Mode: Select */}
-          {mode === 'select' && (
-            <>
-              <div className={styles.itemList}>
-                {displayItems.slice(0, 8).map((item) => (
-                  <div key={item.id} className={styles.itemRow}>
-                    <span className={styles.itemName}>{item.name}</span>
-                    {item.year && <span className={styles.itemYear}>{item.year}</span>}
-                  </div>
-                ))}
-                {displayItems.length > 8 && (
-                  <div className={styles.itemMore}>+{displayItems.length - 8} more</div>
-                )}
+            {mode === 'select' && (
+              <>
+                <div className={styles.itemList}>
+                  {displayItems.slice(0, 8).map((item) => (
+                    <div key={item.id} className={styles.itemRow}>
+                      <div className={styles.itemRowMain}>
+                        <span className={styles.itemName}>{item.name}</span>
+                        {item.year && <span className={styles.itemYear}>{item.year}</span>}
+                      </div>
+                      {seasonContextLabel && (
+                        <span className={styles.itemSeasonContext}>{seasonContextLabel}</span>
+                      )}
+                    </div>
+                  ))}
+                  {displayItems.length > 8 && (
+                    <div className={styles.itemMore}>+{displayItems.length - 8} more</div>
+                  )}
                 {displayItems.length === 0 && (
                   <div className={styles.noItems}>
                     No valid {clientType === 'sonarr' ? 'series' : 'movies'} found.
@@ -626,8 +990,14 @@ export default function RequestModal({
                       <polyline points="13 2 13 9 20 9"/>
                     </svg>
                   </span>
-                  <span className={styles.modeBtnLabel}>Quick Add</span>
-                  <span className={styles.modeBtnDesc}>Add with defaults — downloads immediately</span>
+                  <div>
+                    <span className={styles.modeBtnLabel}>Quick Add</span>
+                    <span className={styles.modeBtnDesc}>
+                      {hasSeasonContext && !hasSingleEpisodeContext
+                        ? `Add to Sonarr and search for all missing episodes automatically`
+                        : `Add with defaults — downloads immediately`}
+                    </span>
+                  </div>
                 </button>
 
                 <button
@@ -640,8 +1010,10 @@ export default function RequestModal({
                       <path d="M21 21l-4.35-4.35"/>
                     </svg>
                   </span>
-                  <span className={styles.modeBtnLabel}>Interactive Search</span>
-                  <span className={styles.modeBtnDesc}>Pick specific releases from your indexers</span>
+                  <div>
+                    <span className={styles.modeBtnLabel}>Interactive Search</span>
+                    <span className={styles.modeBtnDesc}>{interactiveDesc}</span>
+                  </div>
                 </button>
               </div>
             </>
@@ -913,6 +1285,169 @@ export default function RequestModal({
               </div>
             </>
           )}
+
+          {/* Mode: Interactive Search — Per-episode step-through */}
+          {mode === 'interactive-search' && interactiveStep === 'episode-releases' && (() => {
+            const sel = episodeSelections[currentEpisodeIdx]
+            const ep = sel?.episode
+            const releases = currentEpisodeReleases.length > 0
+              ? currentEpisodeReleases
+              : (sel?.releases ?? [])
+            const currentSelectedGuid = sel?.selectedGuid ?? null
+            return (
+              <>
+                {interactiveError && <div className={styles.error}>{interactiveError}</div>}
+
+                <div className={styles.episodeHeader}>
+                  <div className={styles.episodeProgress}>
+                    {episodeSelections.map((s, i) => (
+                      <span
+                        key={i}
+                        className={[
+                          styles.episodeProgressDot,
+                          i === currentEpisodeIdx ? styles.episodeProgressDotActive : '',
+                          s.selectedGuid !== null ? styles.episodeProgressDotDone : '',
+                        ].filter(Boolean).join(' ')}
+                        title={`S${s.episode.seasonNumber}E${String(s.episode.episodeNumber).padStart(2, '0')} — ${s.episode.title}`}
+                      />
+                    ))}
+                  </div>
+                  <div className={styles.episodeTitle}>
+                    <span className={styles.episodeCode}>
+                      S{String(ep?.seasonNumber ?? 0).padStart(2, '0')}E{String(ep?.episodeNumber ?? 0).padStart(2, '0')}
+                    </span>
+                    <span className={styles.episodeName}>{ep?.title ?? 'Unknown Episode'}</span>
+                  </div>
+                </div>
+
+                {currentEpisodeLoading && (
+                  <div className={styles.interactiveStatus}>
+                    <div className={styles.spinner} />
+                    <p>Searching indexers…</p>
+                  </div>
+                )}
+
+                {currentEpisodeError && !currentEpisodeLoading && (
+                  <div className={styles.error}>{currentEpisodeError}</div>
+                )}
+
+                {!currentEpisodeLoading && (
+                  <div className={styles.releaseTableWrap}>
+                    <table className={styles.releaseTable}>
+                      <thead>
+                        <tr>
+                          <th className={styles.thCheck}></th>
+                          <th className={styles.th}>Title</th>
+                          <th className={styles.th}>Quality</th>
+                          <th className={styles.th}>Format</th>
+                          <th className={styles.th}>Status</th>
+                          <th className={styles.th}>Res</th>
+                          <th className={styles.th}>Size</th>
+                          <th className={styles.th}>CF Score</th>
+                          <th className={styles.th}>Indexer</th>
+                          <th className={styles.th}>Release Group</th>
+                          <th className={styles.th}>Seeders</th>
+                          <th className={styles.th}>Rejection</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {releases.length === 0 && (
+                          <tr>
+                            <td colSpan={12} className={styles.noItems}>No releases found for this episode.</td>
+                          </tr>
+                        )}
+                        {releases.map((rel) => {
+                          const isSelected = currentSelectedGuid === rel.guid
+                          return (
+                            <tr
+                              key={rel.guid}
+                              className={isSelected ? styles.releaseRowSelected : ''}
+                              onClick={() =>
+                                setEpisodeSelections((prev) =>
+                                  prev.map((s, i) =>
+                                    i === currentEpisodeIdx
+                                      ? { ...s, selectedGuid: s.selectedGuid === rel.guid ? null : rel.guid }
+                                      : s
+                                  )
+                                )
+                              }
+                            >
+                              <td className={styles.tdCheck}>
+                                <input
+                                  type="radio"
+                                  readOnly
+                                  checked={isSelected}
+                                />
+                              </td>
+                              <td className={styles.tdTitle}>
+                                <span className={styles.releaseTitleText}>{rel.title}</span>
+                              </td>
+                              <td className={styles.td}>
+                                <span className={styles.qualityBadge}>{rel.quality}</span>
+                              </td>
+                              <td className={styles.td}>
+                                {rel.source ? <span className={styles.formatBadge}>{rel.source}</span> : '—'}
+                              </td>
+                              <td className={styles.tdStatus}>
+                                {rel.approved ? (
+                                  <span className={styles.statusApproved}>Approved</span>
+                                ) : (
+                                  <span className={styles.statusRejected} title={rel.rejectedReason || 'Not approved'}>Rejected</span>
+                                )}
+                              </td>
+                              <td className={styles.tdNumeric}>{rel.resolution ? `${rel.resolution}p` : '—'}</td>
+                              <td className={styles.tdNumeric}>{rel.sizeFormatted}</td>
+                              <td className={styles.tdNumeric}>
+                                {rel.customFormatScore !== 0 && (
+                                  <span className={rel.customFormatScore > 0 ? styles.scorePos : styles.scoreNeg}>
+                                    {rel.customFormatScore > 0 ? '+' : ''}{rel.customFormatScore}
+                                  </span>
+                                )}
+                              </td>
+                              <td className={styles.td}>{rel.indexer}</td>
+                              <td className={styles.td}>{rel.releaseGroup || '—'}</td>
+                              <td className={styles.tdNumeric}>
+                                {rel.seeders >= 0 ? <span className={styles.seeders}>⚤ {rel.seeders.toLocaleString()}</span> : '—'}
+                              </td>
+                              <td className={styles.td}>
+                                {rel.rejected ? (
+                                  <span className={styles.rejectedReason} title={rel.rejectedReason}>{rel.rejectedReason || 'Rejected'}</span>
+                                ) : '—'}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )
+          })()}
+
+          {/* Mode: Interactive Search — Summary */}
+          {mode === 'interactive-search' && interactiveStep === 'summary' && (
+            <>
+              {interactiveError && <div className={styles.error}>{interactiveError}</div>}
+              <div className={styles.summaryList}>
+                {episodeSelections.map((sel, i) => (
+                  <div key={i} className={styles.summaryRow}>
+                    <span className={styles.summaryEpisodeCode}>
+                      S{String(sel.episode.seasonNumber).padStart(2, '0')}E{String(sel.episode.episodeNumber).padStart(2, '0')}
+                    </span>
+                    <span className={styles.summaryEpisodeName}>{sel.episode.title}</span>
+                    {sel.selectedGuid !== null ? (
+                      <span className={styles.summarySelected}>
+                        {sel.releases.find((r) => r.guid === sel.selectedGuid)?.quality ?? 'Selected'}
+                      </span>
+                    ) : (
+                      <span className={styles.summarySkipped}>Skipped</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -960,6 +1495,47 @@ export default function RequestModal({
                 disabled={selectedGuids.size === 0}
               >
                 Download {selectedGuids.size} Release{selectedGuids.size !== 1 ? 's' : ''}
+              </Button>
+            </>
+          )}
+          {mode === 'interactive-search' && interactiveStep === 'episode-releases' && (
+            <>
+              {currentEpisodeIdx > 0 && (
+                <Button variant="ghost" onClick={goToPrevEpisode} disabled={currentEpisodeLoading}>
+                  ‹ Back
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                onClick={() => selectEpisodeRelease(null)}
+                disabled={currentEpisodeLoading}
+              >
+                Skip Episode
+              </Button>
+              <Button
+                variant={clientType === 'sonarr' ? 'secondary' : 'primary'}
+                onClick={() => {
+                  const sel = episodeSelections[currentEpisodeIdx]
+                  selectEpisodeRelease(sel?.selectedGuid ?? null)
+                }}
+                disabled={currentEpisodeLoading || episodeSelections[currentEpisodeIdx]?.selectedGuid === null}
+              >
+                {currentEpisodeIdx < episodeSelections.length - 1 ? 'Next Episode ›' : 'Review & Download'}
+              </Button>
+            </>
+          )}
+          {mode === 'interactive-search' && interactiveStep === 'summary' && (
+            <>
+              <Button variant="ghost" onClick={() => { setCurrentEpisodeIdx(episodeSelections.length - 1); setInteractiveStep('episode-releases'); setCurrentEpisodeReleases(episodeSelections[episodeSelections.length - 1]?.releases ?? []) }} disabled={submitting}>
+                ‹ Back
+              </Button>
+              <Button
+                variant={clientType === 'sonarr' ? 'secondary' : 'primary'}
+                onClick={handleInteractiveSubmit}
+                loading={submitting}
+                disabled={episodeSelections.every((s) => s.selectedGuid === null)}
+              >
+                Download {episodeSelections.filter((s) => s.selectedGuid !== null).length} Release{episodeSelections.filter((s) => s.selectedGuid !== null).length !== 1 ? 's' : ''}
               </Button>
             </>
           )}
